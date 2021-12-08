@@ -1,4 +1,5 @@
 #include "mfs.h"
+#include "udp.h"
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
