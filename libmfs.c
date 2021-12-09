@@ -14,11 +14,17 @@ struct sockaddr_in addrSnd, addrRcv;
  * Returns 0 on success and -1 on failure.
  */
 int MFS_Init(char *hostname, int port) {
+    if (sd != NULL) {
+        perror("Error: Connection to server already initialized and is still open.");
+        return -1;
+    }
+
     sd = UDP_Open(CLIENT_PORT);
     int rc = UDP_FillSockAddr(&addrSnd, HOST_NAME, SERVER_PORT);
 
     if (rc == -1) {
         perror("Error: Could not establish server connection.");
+        return -1;
     }
 
     return 0;
