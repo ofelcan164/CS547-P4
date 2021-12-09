@@ -1,11 +1,27 @@
 #include "mfs.h"
 #include "udp.h"
 
+#define BUFFER_SIZE (1000)
+#define HOST_NAME "localhost"
+#define CLIENT_PORT (20000)
+#define SERVER_PORT (10000)
+
+int sd;
+struct sockaddr_in addrSnd, addrRcv;
+
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
+ * Returns 0 on success and -1 on failure.
  */
 int MFS_Init(char *hostname, int port) {
+    sd = UDP_Open(CLIENT_PORT);
+    int rc = UDP_FillSockAddr(&addrSnd, HOST_NAME, SERVER_PORT);
 
+    if (rc == -1) {
+        perror("Error: Could not establish server connection.");
+    }
+
+    return 0;
 }
 
 /**
