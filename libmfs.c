@@ -9,22 +9,22 @@ enum msg_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
 
 struct message {
     enum msg_type type;
-    char *hostname[50];
+    char hostname[50];
     int port;
     int pinum;
-    char *name[28];
+    char name[28];
     int inum;
-    char *buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE];
     int block;
     int file_type;
-    MFS_Stat_t *m
+    MFS_Stat_t m;
 };
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
  */
 int MFS_Init(char *hostname, int port) {
-
+    return 0;
 }
 
 /**
@@ -43,18 +43,21 @@ int MFS_Lookup(int pinum, char *name) {
     struct message msg;
     msg.type = LOOKUP;
     msg.pinum = pinum;
-    msg.name = name;
+    strcpy(msg.name, name);
 
     // Copy to buffer
-    char *buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
     UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
 
     // Receive inode number (or -1 if failed)
-    struct message ret_msg;
-    UDP_Read(sd, &addrRcv, &buf, sizeof(ret_msg)); // TODO receive message in this way?
+    struct message ret_msg = {};
+    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+
+    // Cast response to message
+    memcpy(&msg, (struct message*)buf, sizeof(msg));
 
     return ret_msg.inum; // TODO
 }
@@ -70,25 +73,28 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     struct message msg;
     msg.type = STAT;
     msg.inum = inum;
-    msg.m = m
+    msg.m = *m;
 
     // Copy to buffer
-    char *buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
     UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
 
     // Receive the stats of the inode
-    struct message ret_msg;
-    UDP_Read(sd, &addrRcv, &buf, sizeof(ret_msg)); // TODO receive message in this way?
+    struct message ret_msg = {};
+    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+
+    // Cast response to message
+    memcpy(&msg, (struct message*)buf, sizeof(msg));
 
     // Return success or failure based on returned stats
     if (ret_msg.m.size == -1) 
         return -1;
 
-    m->size = ret_msg.m->size;
-    m->type = ret_msg.m->type;
+    m->size = ret_msg.m.size;
+    m->type = ret_msg.m.type;
     return 0;
 }
 
@@ -98,7 +104,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
  * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
  */
 int MFS_Write(int inum, char *buffer, int block) {
-
+    return 0;
 }
 
 /**
@@ -108,7 +114,7 @@ int MFS_Write(int inum, char *buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 int MFS_Read(int inum, char *buffer, int block) {
-
+    return 0;
 }
 
 /**
@@ -126,18 +132,21 @@ int MFS_Creat(int pinum, int type, char *name) {
     msg.type = CREAT;
     msg.pinum = pinum;
     msg.file_type = type;
-    msg.name = name;
+    strcpy(msg.name, name);
 
     // Copy to buffer
-    char *buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
     UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
 
     // Receive success or failure
-    struct message ret_msg;
-    UDP_Read(sd, &addrRcv, &buf, sizeof(ret_msg)); // TODO receive message in this way?
+    struct message ret_msg = {};
+    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+
+    // Cast response to message
+    memcpy(&msg, (struct message*)buf, sizeof(msg));
 
     // Return based on what server returned
     return ret_msg.inum; // TODO
@@ -150,13 +159,13 @@ int MFS_Creat(int pinum, int type, char *name) {
  */
 int MFS_Unlink(int pinum, char *name) {
     // Fill struct to send
-    msg.type = UNLINK;
     struct message msg;
+    msg.type = UNLINK;
     msg.pinum = pinum;
-    msg.name = name;
+    strcpy(msg.name, name);
 
     // Copy to buffer
-    char *buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
@@ -164,8 +173,11 @@ int MFS_Unlink(int pinum, char *name) {
 
 
     // Receive success or failure
-    struct message ret_msg;
-    UDP_Read(sd, &addrRcv, &buf, sizeof(ret_msg)); // TODO receive message in this way?
+    struct message ret_msg = {};
+    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+
+    // Cast response to message
+    memcpy(&msg, (struct message*)buf, sizeof(msg));
 
     // Return based on what server returned
     return ret_msg.inum; // TODO
@@ -175,5 +187,5 @@ int MFS_Unlink(int pinum, char *name) {
  * Just tells the server to force all of its data structures to disk and shutdown by calling exit(0). This interface will mostly be used for testing purposes.
  */
 int MFS_Shutdown() {
-
+    return 0;
 }
