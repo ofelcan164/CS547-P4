@@ -2,6 +2,7 @@
 #include "udp.h"
 
 #define BUFFER_SIZE (1000)
+enum msg_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
 
 // server code
 int main(int argc, char *argv[]) {

@@ -1,8 +1,24 @@
 #include "mfs.h"
 #include "udp.h"
 
+#define BUFFER_SIZE (1000)
 int sd;
 struct sockaddr_in addrSnd, addrRcv;
+
+enum msg_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
+
+struct message {
+    enum msg_type type;
+    char *hostname[50];
+    int port;
+    int pinum;
+    char *name[28];
+    int inum;
+    char *buffer[BUFFER_SIZE];
+    int block;
+    int file_type;
+    MFS_Stat_t *m
+}
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
@@ -19,17 +35,19 @@ int MFS_Init(char *hostname, int port) {
  * Failure modes: invalid pinum, name does not exist in pinum.
  */
 int MFS_Lookup(int pinum, char *name) {
-    // Probably have some sort of struct containing args
-    // OR USE GENERERIC which has a msg type field
-    struct lookup_msg {
-        int pinum;
-        char *name;
-    };
+    // Check name
+    if (strlen(name) > 28)
+        return -1;
 
     // Fill struct to send
-    struct lookup_msg msg;
+    struct message msg;
+    msg.type = LOOKUP;
     msg.pinum = pinum;
     msg.name = name;
+
+    // Copy to buffer
+    char *buf[BUFFER_SIZE];
+    memcpy((lookup_msg*)buf, &msg, sizeof(msg));
 
     // Send message
     UDP_Write(sd, &addrSnd, msg, sizeof(msg));
