@@ -6,24 +6,46 @@
 #define CLIENT_PORT (20000)
 #define SERVER_PORT (10000)
 
-int sd;
+int sd = -2; // should not be set to this in UDP_Open().
 struct sockaddr_in addrSnd, addrRcv;
+
+enum msg_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
+
+struct message {
+    enum msg_type type;
+    char hostname[50];
+    int port;
+    int pinum;
+    char name[28];
+    int inum;
+    char buffer[BUFFER_SIZE];
+    int block;
+    int file_type; 
+    // MFS_Stat_t TODO
+};
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
  * Returns 0 on success and -1 on failure.
  */
 int MFS_Init(char *hostname, int port) {
-    if (sd != NULL) {
-        perror("Error: Connection to server already initialized and is still open.");
+    if (sd != -2) {
+        printf("Error: Connection to server already initialized and is still open.\n");
         return -1;
     }
 
     sd = UDP_Open(CLIENT_PORT);
+
+    if (sd == -1) {
+        sd = -2; // reset to unitialized status
+        printf("Could not open connection on port: %d\n", port);
+        return -1;
+    }
+
     int rc = UDP_FillSockAddr(&addrSnd, HOST_NAME, SERVER_PORT);
 
     if (rc == -1) {
-        perror("Error: Could not establish server connection.");
+        printf("Error: Could not establish server connection.\n");
         return -1;
     }
 
@@ -89,7 +111,38 @@ int MFS_Unlink(int pinum, char *name) {
 
 /**
  * Just tells the server to force all of its data structures to disk and shutdown by calling exit(0). This interface will mostly be used for testing purposes.
+ * Returns 0 on success and -1 on failure.
  */
 int MFS_Shutdown() {
+    if (sd == -2) {
+        printf("Error: Can't shutdown. Connection was never initialized.\n");
+        return -1;
+    }
 
+    struct message msg;
+    msg.type = SHUTDOWN;
+
+    char buffer[sizeof(msg)];
+
+    memcpy((struct message*) buffer, &msg, sizeof(msg));
+
+    int writeResult = UDP_Write(sd, &addrSnd, buffer, BUFFER_SIZE);
+
+    if (writeResult == -1) {
+        printf("Error occured in Shutdown() -> UDP_Write().\n");
+        return -1;
+    }
+
+    int rc = UDP_Close(sd);
+    
+    if (rc != 0) {
+        printf("Error: unable to close connection to server.\n");
+        return -1;
+    }
+
+    sd = -2;
+    memset(&addrRcv, 0, sizeof(addrRcv));
+    memset(&addrSnd, 0, sizeof(addrSnd));
+
+    return 0;
 }
