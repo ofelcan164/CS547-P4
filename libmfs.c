@@ -1,6 +1,9 @@
 #include "mfs.h"
 #include "udp.h"
 
+int sd;
+struct sockaddr_in addrSnd, addrRcv;
+
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
  */
@@ -11,21 +14,61 @@ int MFS_Init(char *hostname, int port) {
 /**
  * Takes the parent inode number (which should be the inode number of a directory) 
  * and looks up the entry name in it. 
- * The inode number of name is returned. Success: return inode number of name; failure: return -1. 
+ * The inode number of name is returned. 
+ * Success: return inode number of name; failure: return -1. 
  * Failure modes: invalid pinum, name does not exist in pinum.
  */
 int MFS_Lookup(int pinum, char *name) {
+    // Probably have some sort of struct containing args
+    // OR USE GENERERIC which has a msg type field
+    struct lookup_msg {
+        int pinum;
+        char *name;
+    };
 
+    // Fill struct to send
+    struct lookup_msg msg;
+    msg.pinum = pinum;
+    msg.name = name;
+
+    // Send message
+    UDP_Write(sd, &addrSnd, msg, sizeof(msg));
+
+    // Receive inode number (or -1 if failed)
+    int inum;
+    UDP_Read(sd, &addrRcv, &inum, sizeof(inum));
+
+    return inum;
 }
 
 /**
- * returns some information about the file specified by inum. 
+ * Returns some information about the file specified by inum. 
  * Upon success, return 0, otherwise -1. 
  * The exact info returned is defined by MFS_Stat_t. 
  * Failure modes: inum does not exist.
  */
 int MFS_Stat(int inum, MFS_Stat_t *m) {
+    // Probably have some sort of struct containing args
+    // OR USE GENERERIC which has a msg type field
+    struct stat_msg {
+        int inum;
+    };
 
+    // Fill struct to send
+    struct stat_msg msg;
+    msg.inum = inum;
+
+    // Send message
+    UDP_Write(sd, &addrSnd, msg, sizeof(msg));
+
+    // Receive the stats of the inode
+    UDP_Read(sd, &addrRcv, &m, sizeof(&m));
+
+    // Return success or failure based on returned stats
+    if (m->size == -1) 
+        return -1;
+
+    return 0;
 }
 
 /**
@@ -53,6 +96,33 @@ int MFS_Read(int inum, char *buffer, int block) {
  * Failure modes: pinum does not exist, or name is too long. If name already exists, return success (think about why).
  */
 int MFS_Creat(int pinum, int type, char *name) {
+    // Probably have some sort of struct containing args
+    // OR USE GENERERIC which has a msg type field
+    struct creat_msg {
+        int pinum;
+        int type;
+        char *name;
+    };
+
+    // Check name
+    if (strlen(name) > 28)
+        return -1;
+
+    // Fill struct to send
+    struct creat_msg msg;
+    msg.pinum = pinum;
+    msg.type = type;
+    msg.name = name;
+
+    // Send message
+    UDP_Write(sd, &addrSnd, msg, sizeof(msg));
+
+    // Receive success or failure
+    int rc;
+    UDP_Read(sd, &addrRcv, &rc, sizeof(rc));
+
+    // Return based on what server returned
+    return rc;
 
 }
 
@@ -62,7 +132,27 @@ int MFS_Creat(int pinum, int type, char *name) {
  * Note that the name not existing is NOT a failure by our definition (think about why this might be).
  */
 int MFS_Unlink(int pinum, char *name) {
+    // Probably have some sort of struct containing args
+    // OR USE GENERERIC which has a msg type field
+    struct unlink_msg {
+        int pinum;
+        char *name;
+    };
 
+    // Fill struct to send
+    struct unlink_msg msg;
+    msg.pinum = pinum;
+    msg.name = name;
+
+    // Send message
+    UDP_Write(sd, &addrSnd, msg, sizeof(msg));
+
+    // Receive success or failure
+    int rc;
+    UDP_Read(sd, &addrRcv, &rc, sizeof(rc));
+
+    // Return based on what server returned
+    return rc;
 }
 
 /**
