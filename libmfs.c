@@ -91,12 +91,9 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     memcpy(&msg, (struct response*)msg_content, RESP_SIZE));
 
     // Return success or failure based on returned stats
-    if (resp.rc < 0) 
-        return -1;
-
     m->size = resp.m.size;
     m->type = resp.m.type;
-    return 0;
+    return resp.rc;
 }
 
 /**
@@ -157,11 +154,8 @@ int MFS_Creat(int pinum, int type, char *name) {
     // Cast response
     memcpy(&msg, (struct response*)msg_content, RESP_SIZE));
 
-    // Return based on what server returned
-    if (resp.rc < 0)
-        return -1;
-    
-    return 0;
+    // Return based on what server returned   
+    return resp.rc;
 }
 
 /**
