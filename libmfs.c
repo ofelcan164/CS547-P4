@@ -1,5 +1,6 @@
 #include "mfs.h"
 #include "udp.h"
+#include "types.h"
 
 #define BUFFER_SIZE (1000)
 #define HOST_NAME "localhost"
@@ -8,21 +9,6 @@
 
 int sd = -2; // should not be set to this in UDP_Open().
 struct sockaddr_in addrSnd, addrRcv;
-
-enum msg_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
-
-struct message {
-    enum msg_type type;
-    char hostname[50];
-    int port;
-    int pinum;
-    char name[28];
-    int inum;
-    char buffer[BUFFER_SIZE];
-    int block;
-    int file_type; 
-    // MFS_Stat_t TODO
-};
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
@@ -59,7 +45,7 @@ int MFS_Init(char *hostname, int port) {
  * Failure modes: invalid pinum, name does not exist in pinum.
  */
 int MFS_Lookup(int pinum, char *name) {
-
+    return 0;
 }
 
 /**
@@ -69,7 +55,7 @@ int MFS_Lookup(int pinum, char *name) {
  * Failure modes: inum does not exist.
  */
 int MFS_Stat(int inum, MFS_Stat_t *m) {
-
+    return 0;
 }
 
 /**
@@ -78,7 +64,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
  * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
  */
 int MFS_Write(int inum, char *buffer, int block) {
-
+        return 0;
 }
 
 /**
@@ -88,7 +74,7 @@ int MFS_Write(int inum, char *buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 int MFS_Read(int inum, char *buffer, int block) {
-
+    return 0;
 }
 
 /**
@@ -97,7 +83,7 @@ int MFS_Read(int inum, char *buffer, int block) {
  * Failure modes: pinum does not exist, or name is too long. If name already exists, return success (think about why).
  */
 int MFS_Creat(int pinum, int type, char *name) {
-
+    return 0;
 }
 
 /**
@@ -106,7 +92,7 @@ int MFS_Creat(int pinum, int type, char *name) {
  * Note that the name not existing is NOT a failure by our definition (think about why this might be).
  */
 int MFS_Unlink(int pinum, char *name) {
-
+    return 0;
 }
 
 /**
@@ -119,14 +105,14 @@ int MFS_Shutdown() {
         return -1;
     }
 
-    struct message msg;
-    msg.type = SHUTDOWN;
+    struct request req;
+    req.type = SHUTDOWN;
 
-    char buffer[sizeof(msg)];
+    char req_message[REQ_SIZE];
 
-    memcpy((struct message*) buffer, &msg, sizeof(msg));
+    memcpy((struct request*) req_message, &req, REQ_SIZE);
 
-    int writeResult = UDP_Write(sd, &addrSnd, buffer, BUFFER_SIZE);
+    int writeResult = UDP_Write(sd, &addrSnd, req_message, REQ_SIZE);
 
     if (writeResult == -1) {
         printf("Error occured in Shutdown() -> UDP_Write().\n");

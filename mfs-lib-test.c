@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "mfs.h"
+#include "types.h"
 
 // Use asert for all tests so that tests passed message isn't
 // seen if test fails.
