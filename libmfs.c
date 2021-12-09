@@ -1,24 +1,9 @@
 #include "mfs.h"
 #include "udp.h"
+#include "types.h"
 
-#define BUFFER_SIZE (1000)
 int sd;
 struct sockaddr_in addrSnd, addrRcv;
-
-enum msg_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
-
-struct message {
-    enum msg_type type;
-    char hostname[50];
-    int port;
-    int pinum;
-    char name[28];
-    int inum;
-    char buffer[BUFFER_SIZE];
-    int block;
-    int file_type;
-    MFS_Stat_t m;
-};
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
@@ -50,11 +35,19 @@ int MFS_Lookup(int pinum, char *name) {
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
-    UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    if (rc < 0) {
+        perror("Error occured in MFS_Lookup -> UDP_Write()\n");
+        return rc;
+    }
 
     // Receive inode number (or -1 if failed)
     struct message ret_msg = {};
-    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    rc = UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    if (rc < 0) {
+        perror("Error occured in MFS_Lookup -> UDP_Read()\n");
+        return rc;
+    }
 
     // Cast response to message
     memcpy(&msg, (struct message*)buf, sizeof(msg));
@@ -80,11 +73,19 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
-    UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    if (rc < 0) {
+        perror("Error occured in MFS_Stat -> UDP_Write()\n");
+        return rc;
+    }
 
     // Receive the stats of the inode
     struct message ret_msg = {};
-    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    rc = UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    if (rc < 0) {
+        perror("Error occured in MFS_Stat -> UDP_Read()\n");
+        return rc;
+    }
 
     // Cast response to message
     memcpy(&msg, (struct message*)buf, sizeof(msg));
@@ -139,11 +140,19 @@ int MFS_Creat(int pinum, int type, char *name) {
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
-    UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    if (rc < 0) {
+        perror("Error occured in MFS_Creat -> UDP_Write()\n");
+        return rc;
+    }
 
     // Receive success or failure
     struct message ret_msg = {};
-    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    rc = UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    if (rc < 0) {
+        perror("Error occured in MFS_Creat -> UDP_Read()\n");
+        return rc;
+    }
 
     // Cast response to message
     memcpy(&msg, (struct message*)buf, sizeof(msg));
@@ -169,12 +178,19 @@ int MFS_Unlink(int pinum, char *name) {
     memcpy((struct message*)buf, &msg, sizeof(msg));
 
     // Send message
-    UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
-
+    int rc = UDP_Write(sd, &addrSnd, buf, BUFFER_SIZE);
+    if (rc < 0) {
+        perror("Error occured in MFS_Unlink -> UDP_Write()\n");
+        return rc;
+    }
 
     // Receive success or failure
     struct message ret_msg = {};
-    UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    rc = UDP_Read(sd, &addrRcv, buf, sizeof(ret_msg)); // TODO receive message in this way?
+    if (rc < 0) {
+        perror("Error occured in MFS_Unlink -> UDP_Read()\n");
+        return rc;
+    }
 
     // Cast response to message
     memcpy(&msg, (struct message*)buf, sizeof(msg));
