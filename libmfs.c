@@ -30,27 +30,24 @@ int MFS_Lookup(int pinum, char *name) {
     req.pinum = pinum;
     strcpy(req.name, name);
 
-    // Copy to buffer
-    char req_content[REQ_SIZE];
-    memcpy((struct request*)req_content, &req, REQ_SIZE);
-
     // Send request
-    int rc = UDP_Write(sd, &addrSnd, req_content, REQ_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Lookup -> UDP_Write()\n");
         return rc;
     }
 
     // Receive inode number (or -1 if failed)
-    struct response resp = {};
-    rc = UDP_Read(sd, &addrRcv, req_content, RESP_SIZE);
+    char *buffer;
+    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Lookup -> UDP_Read()\n");
         return rc;
     }
 
     // Cast response
-    memcpy(&resp, (struct response*)req_content, RESP_SIZE);
+    struct response resp;
+    resp = *((struct response *)buffer);
 
     return resp.rc;
 }
@@ -67,27 +64,24 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     req.type = STAT;
     req.inum = inum;
 
-    // Copy to buffer
-    char req_content[REQ_SIZE];
-    memcpy((struct request*)req_content, &req, REQ_SIZE);
-
     // Send request
-    int rc = UDP_Write(sd, &addrSnd, req_content, REQ_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Stat -> UDP_Write()\n");
         return rc;
     }
 
     // Receive the stats of the inode
-    struct response resp = {};
-    rc = UDP_Read(sd, &addrRcv, req_content, RESP_SIZE);
+    char *buffer;
+    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Stat -> UDP_Read()\n");
         return rc;
     }
-
+    
     // Cast response
-    memcpy(&resp, (struct response*)req_content, RESP_SIZE);
+    struct response resp;
+    resp = *((struct response *)buffer);
 
     // Return success or failure based on returned stats
     m->size = resp.m.size;
@@ -131,27 +125,24 @@ int MFS_Creat(int pinum, int type, char *name) {
     req.file_type = type;
     strcpy(req.name, name);
 
-    // Copy to buffer
-    char req_content[REQ_SIZE];
-    memcpy((struct request*)req_content, &req, REQ_SIZE);
-
     // Send request
-    int rc = UDP_Write(sd, &addrSnd, req_content, REQ_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Creat -> UDP_Write()\n");
         return rc;
     }
 
     // Receive success or failure
-    struct response resp = {};
-    rc = UDP_Read(sd, &addrRcv, req_content, RESP_SIZE);
+    char *buffer;
+    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Creat -> UDP_Read()\n");
         return rc;
     }
-
+    
     // Cast response
-    memcpy(&resp, (struct response*)req_content, RESP_SIZE);
+    struct response resp;
+    resp = *((struct response *)buffer);
 
     // Return based on what server returned   
     return resp.rc;
@@ -169,27 +160,24 @@ int MFS_Unlink(int pinum, char *name) {
     req.pinum = pinum;
     strcpy(req.name, name);
 
-    // Copy to buffer
-    char req_content[REQ_SIZE];
-    memcpy((struct request*)req_content, &req, REQ_SIZE);
-
     // Send request
-    int rc = UDP_Write(sd, &addrSnd, req_content, REQ_SIZE);
+    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Unlink -> UDP_Write()\n");
         return rc;
     }
 
     // Receive success or failure
-    struct response resp = {};
-    rc = UDP_Read(sd, &addrRcv, req_content, RESP_SIZE);
+    char *buffer;
+    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Unlink -> UDP_Read()\n");
         return rc;
     }
-
+    
     // Cast response
-    memcpy(&resp, (struct response*)req_content, RESP_SIZE);
+    struct response resp;
+    resp = *((struct response *)buffer);
 
     // Return based on what server returned
     return resp.rc;

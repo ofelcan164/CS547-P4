@@ -13,3 +13,4 @@
 # Ignore specific extensions
 *.o
 *.so
+*.json
