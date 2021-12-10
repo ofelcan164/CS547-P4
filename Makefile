@@ -3,7 +3,8 @@ CFLAGS := -Wall -Werror
 
 SRCS   := client.c \
 	server.c \
-	mfs-lib-test.c
+	mfs-lib-test.c \
+	mfs-lib-test-server.c
 
 OBJS   := ${SRCS:c=o}
 PROGS  := ${SRCS:.c=}

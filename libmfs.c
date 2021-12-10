@@ -64,7 +64,49 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
  * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
  */
 int MFS_Write(int inum, char *buffer, int block) {
-        return 0;
+    struct request req;
+    req.type = WRITE;
+    req.inum = inum;
+    req.block = block;
+    memcpy(req.buffer, buffer, strlen(buffer));
+    /**
+    * How are we sending a block of size 4096 with a message buffer of size 
+    * 1000?
+    */
+
+    char req_message[REQ_SIZE];
+    memcpy((struct request*) req_message, &req, REQ_SIZE);
+
+    int writeResult = UDP_Write(sd, &addrSnd, req_message, REQ_SIZE);
+
+    if (writeResult == -1) {
+        printf("Error occured while writing. MFS_Write() -> UDP_Write()\n");
+        return -1;
+    }
+
+    printf("Write request sent...\n");
+
+    char response_message[RESP_SIZE];
+
+    int readResult = UDP_Read(sd, &addrRcv, response_message, RESP_SIZE);
+
+    if (readResult == -1) {
+        printf("Error occured while reading. MFS_Write() -> UDP_Read()\n");
+        return -1;
+    }
+
+    struct response res;
+    memcpy(&res, (struct response*) response_message, RESP_SIZE);
+
+    if (res.rc != 0) {
+        printf("Server error occured while writing. Reponse code: %d\n", res.rc);
+        return -1;
+    }
+
+    printf("Write successful.\n");
+
+    return 0;    
+
 }
 
 /**
@@ -74,6 +116,44 @@ int MFS_Write(int inum, char *buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 int MFS_Read(int inum, char *buffer, int block) {
+    struct request req;
+    req.type = READ;
+    req.inum = inum;
+    req.block = block;
+
+    char req_message[REQ_SIZE];
+    memcpy((struct request*) req_message, &req, REQ_SIZE);
+
+    int writeResult = UDP_Write(sd, &addrSnd, req_message, REQ_SIZE);
+    
+    if (writeResult == -1) {
+        printf("Error occured while writing. MFS_Read() -> UDP_Write()\n");
+        return -1;
+    }
+
+    printf("Read request sent...\n");
+
+    char res_message[RESP_SIZE];
+
+    int readResult = UDP_Read(sd, &addrRcv, res_message, RESP_SIZE);
+
+    if (readResult == -1) {
+        printf("Error occured while reading. MFS_Read() -> UDP_Read()\n");
+        return -1;
+    }
+
+    struct response res;
+    memcpy(&res, (struct response*) res_message, RESP_SIZE);
+
+    if (res.rc != 0) {
+        printf("Server error occured while reading. Reponse code: %d\n", res.rc);
+        return -1;
+    }
+
+    memcpy(buffer, res.buffer, strlen(res.buffer)); //TODO: want to make sure room to copy and no overflow happening here.
+    
+    printf("Read successful.\n");
+
     return 0;
 }
 
