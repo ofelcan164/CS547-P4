@@ -38,7 +38,7 @@ int MFS_Lookup(int pinum, char *name) {
     }
 
     // Receive inode number (or -1 if failed)
-    char *buffer;
+    char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Lookup -> UDP_Read()\n");
@@ -72,7 +72,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     }
 
     // Receive the stats of the inode
-    char *buffer;
+    char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Stat -> UDP_Read()\n");
@@ -133,7 +133,7 @@ int MFS_Creat(int pinum, int type, char *name) {
     }
 
     // Receive success or failure
-    char *buffer;
+    char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Creat -> UDP_Read()\n");
@@ -168,7 +168,7 @@ int MFS_Unlink(int pinum, char *name) {
     }
 
     // Receive success or failure
-    char *buffer;
+    char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         perror("Error occured in MFS_Unlink -> UDP_Read()\n");
