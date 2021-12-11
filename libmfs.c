@@ -33,7 +33,7 @@ int MFS_Lookup(int pinum, char *name) {
     // Send request
     int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Lookup -> UDP_Write()\n");
+        printf("Error occured in MFS_Lookup -> UDP_Write()\n");
         return rc;
     }
 
@@ -41,7 +41,7 @@ int MFS_Lookup(int pinum, char *name) {
     char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Lookup -> UDP_Read()\n");
+        printf("Error occured in MFS_Lookup -> UDP_Read()\n");
         return rc;
     }
 
@@ -67,7 +67,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     // Send request
     int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Stat -> UDP_Write()\n");
+        printf("Error occured in MFS_Stat -> UDP_Write()\n");
         return rc;
     }
 
@@ -75,7 +75,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Stat -> UDP_Read()\n");
+        printf("Error occured in MFS_Stat -> UDP_Read()\n");
         return rc;
     }
     
@@ -128,7 +128,7 @@ int MFS_Creat(int pinum, int type, char *name) {
     // Send request
     int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Creat -> UDP_Write()\n");
+        printf("Error occured in MFS_Creat -> UDP_Write()\n");
         return rc;
     }
 
@@ -136,7 +136,7 @@ int MFS_Creat(int pinum, int type, char *name) {
     char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Creat -> UDP_Read()\n");
+        printf("Error occured in MFS_Creat -> UDP_Read()\n");
         return rc;
     }
     
@@ -163,7 +163,7 @@ int MFS_Unlink(int pinum, char *name) {
     // Send request
     int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Unlink -> UDP_Write()\n");
+        printf("Error occured in MFS_Unlink -> UDP_Write()\n");
         return rc;
     }
 
@@ -171,7 +171,7 @@ int MFS_Unlink(int pinum, char *name) {
     char buffer[RESP_SIZE];
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
-        perror("Error occured in MFS_Unlink -> UDP_Read()\n");
+        printf("Error occured in MFS_Unlink -> UDP_Read()\n");
         return rc;
     }
     
