@@ -2,7 +2,6 @@
 #include "udp.h"
 #include "types.h"
 
-#define BUFFER_SIZE (1000)
 #define CLIENT_PORT (20000)
 
 int sd = -2; // should not be set to this in UDP_Open().
@@ -124,10 +123,6 @@ int MFS_Write(int inum, char *buffer, int block) {
     req.inum = inum;
     req.block = block;
     strcpy(req.buffer, buffer);
-    /**
-    * How are we sending a block of size 4096 with a message buffer of size 
-    * 1000?
-    */
 
     int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
 

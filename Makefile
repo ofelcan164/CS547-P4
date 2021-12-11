@@ -14,7 +14,7 @@ ${PROGS} : % : %.o Makefile
 	${CC} $< -o $@ udp.c -L. -lmfs
 
 clean:
-	rm -f ${PROGS} ${OBJS}
+	rm -f ${PROGS} ${OBJS} libmfs.o libmfs.so
 
 %.o: %.c Makefile
 	${CC} ${CFLAGS} -c $<

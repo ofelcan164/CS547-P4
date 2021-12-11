@@ -4,15 +4,17 @@
 #define BUFFER_SIZE (1000)
 #define REQ_SIZE (sizeof(struct request))
 #define RESP_SIZE (sizeof(struct response))
+#define NUM_IMAP_PIECES (256)
+#define FILENAME_SIZE (28)
+#define NUM_INODES_PER_PIECE (16)
+#define NUM_POINTERS_PER_INODE (14)
 
-enum req_type {INIT, LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
+enum req_type {LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
 
 struct request {
     enum req_type type;
-    char hostname[50];
-    int port;
     int pinum;
-    char name[28];
+    char name[FILENAME_SIZE];
     int inum;
     char buffer[BUFFER_SIZE];
     int block;
@@ -25,4 +27,17 @@ struct response {
     char buffer[BUFFER_SIZE];
 };
 
-// Define response codes in enum?
+struct checkpoint_region {
+    int log_end_ptr;
+    int imap_piece_ptrs[NUM_IMAP_PIECES];
+}
+
+struct imap_piece {
+    int inodes[NUM_INODES_PER_PIECE];
+}
+
+struct inode {
+    int size;
+    int type;
+    int pointers[NUM_POINTERS_PER_INODE];
+}
