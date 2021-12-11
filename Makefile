@@ -11,7 +11,7 @@ PROGS  := ${SRCS:.c=}
 all: ${PROGS}
 
 ${PROGS} : % : %.o Makefile
-	${CC} $< -o $@ udp.c
+	${CC} $< -o $@ udp.c -L. -lmfs
 
 clean:
 	rm -f ${PROGS} ${OBJS}
