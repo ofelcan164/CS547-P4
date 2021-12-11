@@ -2,9 +2,7 @@ CC     := gcc
 CFLAGS := -Wall -Werror 
 
 SRCS   := client.c \
-	server.c \
-	mfs-lib-test.c \
-	mfs-lib-test-server.c
+	server.c
 
 OBJS   := ${SRCS:c=o}
 PROGS  := ${SRCS:.c=}
@@ -20,3 +18,9 @@ clean:
 
 %.o: %.c Makefile
 	${CC} ${CFLAGS} -c $<
+
+
+lib:
+	gcc -fPIC -g -c -Wall libmfs.c
+	gcc -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o -lc
+	export LD_LIBRARY_PATH=.
