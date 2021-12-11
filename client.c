@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include "udp.h"
-
-#define BUFFER_SIZE (1000)
+#include "mfs.h"
+#include "types.h"
 
 // client code
 int main(int argc, char *argv[]) {
     struct sockaddr_in addrSnd, addrRcv;
 
     int sd = UDP_Open(20000);
-    int rc = UDP_FillSockAddr(&addrSnd, "localhost", 10000);
+    int rc = MFS_Init("localhost", 10000); // TODO
 
     char message[BUFFER_SIZE];
     sprintf(message, "hello world");

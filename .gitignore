@@ -1,2 +1,16 @@
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
+
+# Unignore all dirs
+!*/
+
+#Unignore Makefile
+!Makefile
+
+# Ignore specific extensions
 *.o
-*.s
+*.so
+*.json
