@@ -2,13 +2,37 @@
 #include "udp.h"
 #include "types.h"
 
-int sd;
+#define BUFFER_SIZE (1000)
+#define CLIENT_PORT (20000)
+
+int sd = -2; // should not be set to this in UDP_Open().
 struct sockaddr_in addrSnd, addrRcv;
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
+ * Returns 0 on success and -1 on failure.
  */
 int MFS_Init(char *hostname, int port) {
+    if (sd != -2) {
+        printf("Error: Connection to server already initialized and is still open.\n");
+        return -1;
+    }
+
+    sd = UDP_Open(CLIENT_PORT);
+
+    if (sd == -1) {
+        sd = -2; // reset to unitialized status
+        printf("Could not open connection on port: %d\n", CLIENT_PORT);
+        return -1;
+    }
+
+    int rc = UDP_FillSockAddr(&addrSnd, hostname, port);
+
+    if (rc == -1) {
+        printf("Error: Could not establish server connection.\n");
+        return -1;
+    }
+
     return 0;
 }
 
@@ -95,7 +119,41 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
  * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
  */
 int MFS_Write(int inum, char *buffer, int block) {
-    return 0;
+    struct request req;
+    req.type = WRITE;
+    req.inum = inum;
+    req.block = block;
+    strcpy(req.buffer, buffer);
+    /**
+    * How are we sending a block of size 4096 with a message buffer of size 
+    * 1000?
+    */
+
+    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
+
+    if (writeResult == -1) {
+        printf("Error occured while writing. MFS_Write() -> UDP_Write()\n");
+        return -1;
+    }
+
+    char response_message[RESP_SIZE];
+
+    int readResult = UDP_Read(sd, &addrRcv, response_message, RESP_SIZE);
+
+    if (readResult == -1) {
+        printf("Error occured while reading. MFS_Write() -> UDP_Read()\n");
+        return -1;
+    }
+
+    struct response res;
+    res = *((struct response *) response_message);
+
+    if (res.rc != 0) {
+        printf("Server error occured while writing. Reponse code: %d\n", res.rc);
+        return -1;
+    }
+
+    return res.rc;
 }
 
 /**
@@ -105,7 +163,38 @@ int MFS_Write(int inum, char *buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 int MFS_Read(int inum, char *buffer, int block) {
-    return 0;
+    struct request req;
+    req.type = READ;
+    req.inum = inum;
+    req.block = block;
+
+    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
+    
+    if (writeResult == -1) {
+        printf("Error occured while writing. MFS_Read() -> UDP_Write()\n");
+        return -1;
+    }
+
+    char res_message[RESP_SIZE];
+
+    int readResult = UDP_Read(sd, &addrRcv, res_message, RESP_SIZE);
+
+    if (readResult == -1) {
+        printf("Error occured while reading. MFS_Read() -> UDP_Read()\n");
+        return -1;
+    }
+
+    struct response res;
+    res = *((struct response *) res_message);
+
+    if (res.rc != 0) {
+        printf("Server error occured while reading. Reponse code: %d\n", res.rc);
+        return -1;
+    }
+
+    strcpy(buffer, res.buffer); //TODO: want to make sure room to copy and no overflow happening here.
+
+    return res.rc;
 }
 
 /**
@@ -185,7 +274,34 @@ int MFS_Unlink(int pinum, char *name) {
 
 /**
  * Just tells the server to force all of its data structures to disk and shutdown by calling exit(0). This interface will mostly be used for testing purposes.
+ * Returns 0 on success and -1 on failure.
  */
 int MFS_Shutdown() {
+    if (sd == -2) {
+        printf("Error: Can't shutdown. Connection was never initialized.\n");
+        return -1;
+    }
+
+    struct request req;
+    req.type = SHUTDOWN;
+
+    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
+
+    if (writeResult == -1) {
+        printf("Error occured in Shutdown() -> UDP_Write().\n");
+        return -1;
+    }
+
+    int rc = UDP_Close(sd);
+    
+    if (rc != 0) {
+        printf("Error: unable to close connection to server.\n");
+        return -1;
+    }
+
+    sd = -2;
+    memset(&addrRcv, 0, sizeof(addrRcv));
+    memset(&addrSnd, 0, sizeof(addrSnd));
+
     return 0;
 }

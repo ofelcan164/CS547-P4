@@ -21,6 +21,8 @@ struct request {
 
 struct response {
     int rc;
-    char buffer[BUFFER_SIZE];
     MFS_Stat_t m;
+    char buffer[BUFFER_SIZE];
 };
+
+// Define response codes in enum?
