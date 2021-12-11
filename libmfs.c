@@ -2,7 +2,6 @@
 #include "udp.h"
 #include "types.h"
 
-#define BUFFER_SIZE (1000)
 #define CLIENT_PORT (20000)
 
 int sd = -2; // should not be set to this in UDP_Open().
