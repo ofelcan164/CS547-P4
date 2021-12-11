@@ -123,10 +123,6 @@ int MFS_Write(int inum, char *buffer, int block) {
     req.inum = inum;
     req.block = block;
     strcpy(req.buffer, buffer);
-    /**
-    * How are we sending a block of size 4096 with a message buffer of size 
-    * 1000?
-    */
 
     int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
 

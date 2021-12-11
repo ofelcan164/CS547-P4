@@ -3,44 +3,50 @@
 #include "types.h"
 #include "mfs.h"
 
-int fs_lookup(int pinum, char* name) {
+// INODE # math:
+//  Given inode #:
+//      imap piece # = inode # / 16 (truncated/rounded down)
+//      imap piece index = inode # % 16
 
+int fs_lookup(int pinum, char* name) {
+    // Nate
 }
 
 int fs_stat(int inum) {
-
+    // OSCar
 }
 
 int fs_write(int inum, char* buffer, int block) {
-
+    // Nate
 }
 
 int fs_read(int inum, int block) {
-
+    // Nate
 }
 
 int fs_create(int pinum, int type, char* name) {
-
+    // OScar
 }
 
 int fs_unlink(int pinum, char* name) {
-
+    // Oscar
 }
 
 int fs_shutdown() {
-
+    // Nate
 }
 
 
-int fd;
-struct checkpoint_region cr;
+int fd; // File descriptor of open FS image file
+struct checkpoint_region cr; // Checkpoint region - in memory
+struct imap_piece cr_imap_pieces[NUM_IMAP_PIECES]; // Full imap - array of imap pieces
 // server code
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         printf("Usage: prompt> server [portnum] [file-system-image]\n");
     }
 
-    // TODO: Initialize / Setup FS
+    // Initialize / Setup FS
 
     // File system image file does not exist
     if (access(argv[2], F_OK) == 0) {
@@ -53,9 +59,8 @@ int main(int argc, char *argv[]) {
         fd = open(argv[2], O_RDWR | O_CREAT); // Open and create image file
 
         // Create checkpoint region
-        cr.log_end_ptr = 0;
         for (int i = 0; i < NUM_IMAP_PIECES; i++) {
-            cr.imap_pieces[i] = -1; // TODO et to -1 or init all pieces
+            cr.imap_piece_ptrs[i] = -1; // TODO set to -1 or init all pieces
         }
 
         // Add root directory
@@ -106,6 +111,7 @@ int main(int argc, char *argv[]) {
         write(fd, (char *)&root_piece, sizeof(root_piece)); // Write the imap piece
 
         cr.imap_pieces[0] = root_imap_piece_ptr;
+        cr_imap_pieces[0] = root_piece; // Update in memory imap
         cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
         lseek(fd, 0, SEEK_SET);

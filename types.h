@@ -29,7 +29,7 @@ struct response {
 
 struct checkpoint_region {
     int log_end_ptr;
-    int imap_pieces[NUM_IMAP_PIECES];
+    int imap_piece_ptrs[NUM_IMAP_PIECES];
 }
 
 struct imap_piece {
