@@ -60,9 +60,10 @@ void test_MFS_Read() {
 
     int result = MFS_Read(inum, buffer, block);
 
-    printf("Response Buffer Contents: %s", buffer);
-
     assert (result == 0);
+
+    char text[] = "test";
+    assert (strcmp(buffer, text));
 }
 
 int main() {

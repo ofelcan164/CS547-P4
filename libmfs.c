@@ -3,12 +3,13 @@
 #include "types.h"
 
 #define BUFFER_SIZE (1000)
-#define HOST_NAME "localhost"
-#define CLIENT_PORT (20000)
 #define SERVER_PORT (10000)
 
 int sd = -2; // should not be set to this in UDP_Open().
 struct sockaddr_in addrSnd, addrRcv;
+
+int CLIENT_PORT = -1;
+char *HOST_NAME;
 
 /**
  * Takes a host name and port number and uses those to find the server exporting the file system.
@@ -19,6 +20,10 @@ int MFS_Init(char *hostname, int port) {
         printf("Error: Connection to server already initialized and is still open.\n");
         return -1;
     }
+
+    CLIENT_PORT = port;
+    HOST_NAME = malloc(strlen(hostname));
+    strcpy(HOST_NAME, hostname);
 
     sd = UDP_Open(CLIENT_PORT);
 
@@ -68,23 +73,18 @@ int MFS_Write(int inum, char *buffer, int block) {
     req.type = WRITE;
     req.inum = inum;
     req.block = block;
-    memcpy(req.buffer, buffer, strlen(buffer));
+    strcpy(req.buffer, buffer);
     /**
     * How are we sending a block of size 4096 with a message buffer of size 
     * 1000?
     */
 
-    char req_message[REQ_SIZE];
-    memcpy((struct request*) req_message, &req, REQ_SIZE);
-
-    int writeResult = UDP_Write(sd, &addrSnd, req_message, REQ_SIZE);
+    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
 
     if (writeResult == -1) {
         printf("Error occured while writing. MFS_Write() -> UDP_Write()\n");
         return -1;
     }
-
-    printf("Write request sent...\n");
 
     char response_message[RESP_SIZE];
 
@@ -96,17 +96,14 @@ int MFS_Write(int inum, char *buffer, int block) {
     }
 
     struct response res;
-    memcpy(&res, (struct response*) response_message, RESP_SIZE);
+    res = *((struct response *) response_message);
 
     if (res.rc != 0) {
         printf("Server error occured while writing. Reponse code: %d\n", res.rc);
         return -1;
     }
 
-    printf("Write successful.\n");
-
-    return 0;    
-
+    return res.rc;
 }
 
 /**
@@ -121,17 +118,12 @@ int MFS_Read(int inum, char *buffer, int block) {
     req.inum = inum;
     req.block = block;
 
-    char req_message[REQ_SIZE];
-    memcpy((struct request*) req_message, &req, REQ_SIZE);
-
-    int writeResult = UDP_Write(sd, &addrSnd, req_message, REQ_SIZE);
+    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
     
     if (writeResult == -1) {
         printf("Error occured while writing. MFS_Read() -> UDP_Write()\n");
         return -1;
     }
-
-    printf("Read request sent...\n");
 
     char res_message[RESP_SIZE];
 
@@ -143,18 +135,16 @@ int MFS_Read(int inum, char *buffer, int block) {
     }
 
     struct response res;
-    memcpy(&res, (struct response*) res_message, RESP_SIZE);
+    res = *((struct response *) res_message);
 
     if (res.rc != 0) {
         printf("Server error occured while reading. Reponse code: %d\n", res.rc);
         return -1;
     }
 
-    memcpy(buffer, res.buffer, strlen(res.buffer)); //TODO: want to make sure room to copy and no overflow happening here.
-    
-    printf("Read successful.\n");
+    strcpy(buffer, res.buffer); //TODO: want to make sure room to copy and no overflow happening here.
 
-    return 0;
+    return res.rc;
 }
 
 /**
@@ -188,11 +178,7 @@ int MFS_Shutdown() {
     struct request req;
     req.type = SHUTDOWN;
 
-    char req_message[REQ_SIZE];
-
-    memcpy((struct request*) req_message, &req, REQ_SIZE);
-
-    int writeResult = UDP_Write(sd, &addrSnd, req_message, REQ_SIZE);
+    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
 
     if (writeResult == -1) {
         printf("Error occured in Shutdown() -> UDP_Write().\n");

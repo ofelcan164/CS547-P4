@@ -17,22 +17,26 @@ int main(int argc, char *argv[]) {
         int rc = UDP_Read(sd, &addr, message, REQ_SIZE);
 
         struct request req;
-        memcpy(&req, (struct request*) message, REQ_SIZE);
+        req = *((struct request *) message);
 
-        printf("server:: read message [size:%d contents:(%s)]\n", rc, message);
+        printf("server:: read message [size:%d contents:(%s), type:(%d)]\n", rc, message, req.type);
         
         if (rc > 0) {
-            char reply[RESP_SIZE];
             struct response res;
             res.rc = 0;
 
-            if (req.type == READ) {
-                char text[] = "test";
-                memcpy(res.buffer, &text, 5);
+            if (req.type == SHUTDOWN) {
+                printf("Shutdown requested...\n");
             }
 
-            memcpy(reply, &res, RESP_SIZE);
-            rc = UDP_Write(sd, &addr, reply, RESP_SIZE);
+            if (req.type == READ) {
+                printf("Request type: READ found.\n");
+                char text[] = "test";
+                strcpy(res.buffer, text);
+                printf("conents: %s\n", res.buffer);
+            }
+
+            rc = UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
             printf("server:: reply\n");
         } 
     }
