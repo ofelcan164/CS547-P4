@@ -12,8 +12,36 @@ int fs_lookup(int pinum, char* name) {
     // Nate
 }
 
+/**
+ * Returns some information about the file specified by inum. 
+ * Upon success, return 0, otherwise -1. 
+ * The exact info returned is defined by MFS_Stat_t. 
+ * Failure modes: inum does not exist.
+ */
 int fs_stat(int inum) {
-    // OSCar
+    // Stat struct to be returned in respose
+    MFS_Stat_t m;
+
+    // Check for valid inum
+    int piece_num = inum / NUM_INODES_PER_PIECE;
+    int idx = inum % NUM_INODES_PER_PIECE;
+    int rc = -1;
+    if (cr_imap_pieces[piece_num][idx] != NULL) {
+        struct inode node = cr_imap_pieces[piece_num][idx];
+        m.size = node.size;
+        m.type = node.type;
+        rc = 0;
+    }
+
+    // Construct response to client
+    struct response resp;
+    resp.rc = rc;
+    resp.m = m;
+
+    // Send response
+    UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
+
+    return rc;
 }
 
 int fs_write(int inum, char* buffer, int block) {
@@ -36,7 +64,8 @@ int fs_shutdown() {
     // Nate
 }
 
-
+int sd; // Socekt descriptor of server
+struct sockaddr_in addr; // Address of socket for communcation with client
 int fd; // File descriptor of open FS image file
 struct checkpoint_region cr; // Checkpoint region - in memory
 struct imap_piece cr_imap_pieces[NUM_IMAP_PIECES]; // Full imap - array of imap pieces
@@ -61,6 +90,12 @@ int main(int argc, char *argv[]) {
         // Create checkpoint region
         for (int i = 0; i < NUM_IMAP_PIECES; i++) {
             cr.imap_piece_ptrs[i] = -1; // TODO set to -1 or init all pieces
+            // Create empty pieces and fill in memory imap
+            struct imap_piece piece;
+            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+                piece.inodes[j] = NULL;
+            }
+            cr_imap_pieces[i] = piece;
         }
 
         // Add root directory
@@ -120,11 +155,10 @@ int main(int argc, char *argv[]) {
         fsync(fd); // Force to disk
     }
 
-    int sd = UDP_Open(atoi(argv[1]));
+    sd = UDP_Open(atoi(argv[1]));
     assert (sd > -1);
 
     while (1) {
-        struct sockaddr_in addr;
         struct request req;
         int rc = UDP_Read(sd, &addr, (char *) &req, REQ_SIZE);
 
@@ -133,6 +167,7 @@ int main(int argc, char *argv[]) {
             case LOOKUP:
                 break;
             case STAT:
+                fs_stat(req.inum);
                 break;
             case WRITE:
                 break;
