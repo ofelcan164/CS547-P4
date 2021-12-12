@@ -193,7 +193,8 @@ int MFS_Read(int inum, char *buffer, int block) {
 }
 
 /**
- * Makes a file (type == MFS_REGULAR_FILE) or directory (type == MFS_DIRECTORY) in the parent directory specified by pinum of name name. 
+ * Makes a file (type == MFS_REGULAR_FILE) or directory (type == MFS_DIRECTORY) 
+ * in the parent directory specified by pinum of name name. 
  * Returns 0 on success, -1 on failure. 
  * Failure modes: pinum does not exist, or name is too long. If name already exists, return success (think about why).
  */
