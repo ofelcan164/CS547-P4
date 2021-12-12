@@ -30,14 +30,14 @@ struct response {
 struct checkpoint_region {
     int log_end_ptr;
     int imap_piece_ptrs[NUM_IMAP_PIECES];
-}
+};
 
 struct imap_piece {
     int inode_ptrs[NUM_INODES_PER_PIECE];
-}
+};
 
 struct inode {
     int size;
     int type;
     int pointers[NUM_POINTERS_PER_INODE];
-}
+};

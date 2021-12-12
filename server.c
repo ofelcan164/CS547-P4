@@ -67,6 +67,7 @@ int fs_create(int pinum, int type, char* name) {
     int idx = pinum / NUM_INODES_PER_PIECE;
 
     int rc = -1;
+    struct response resp;
     if (cr_imap_pieces[piece_num][idx] != -1) {
         // Pinum exists
         // Get p imap piece and pinode
@@ -99,7 +100,6 @@ int fs_create(int pinum, int type, char* name) {
         }
 
         // Send response if already success (name found)
-        struct response resp;
         if (rc != -1) {
             resp.rc = rc;
             UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
@@ -113,29 +113,30 @@ int fs_create(int pinum, int type, char* name) {
             return resp.rc;
         }
 
-        // Determine type (must create new file)
-        if (type == MFS_REGULAR_FILE) {
-            // Create regular file
-            // Find free inode number
-            int inode_num = -1;
-            for (int i = 0; i < NUM_IMAP_PIECES; i++) {
-                for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-                    if (cr_imap_pieces[i][j] == -1) {
-                        inode_num = (i * NUM_INODES_PER_PIECE) + j;
-                        break;
-                    }
-                }
-                if (inode_num != -1) {
+        // Find free inode number
+        int inode_num = -1;
+        for (int i = 0; i < NUM_IMAP_PIECES; i++) {
+            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+                if (cr_imap_pieces[i][j] == -1) {
+                    inode_num = (i * NUM_INODES_PER_PIECE) + j;
                     break;
                 }
             }
-
-            if (inode_num == -1) {
-                // Return failure, no avaiable inode numbers
-                resp.rc = -1;
-                UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
-                return -1;
+            if (inode_num != -1) {
+                break;
             }
+        }
+
+        if (inode_num == -1) {
+            // Return failure, no avaiable inode numbers
+            resp.rc = -1;
+            UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
+            return -1;
+        }
+
+        // Determine type (must create new file)
+        if (type == MFS_REGULAR_FILE) {
+            // Create regular file
 
             // Create new inode
             struct inode new_node;
@@ -166,7 +167,6 @@ int fs_create(int pinum, int type, char* name) {
             cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
             // Update p data block, p inode and p imap piece (if necessary) 
-            // HOW TO DETECT NEED FOR NEW DATA BLOCK? TODO
             for (int i = 0; i < NUM_POINTERS_PER_INODE; i++) {
                 int dir_entry_written = 0;
                 if (pnode.pointers[i] != -1) {
@@ -234,14 +234,135 @@ int fs_create(int pinum, int type, char* name) {
             // Write CR
             lseek(fd, 0, SEEK_SET);
             write(fd, (char *)&cr, sizeof(cr));
+            rc = 0;
 
         } else if (type == MFS_DIRECTORY) {
             // Create directory
+
+            // Create new data block
+            lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to log end
+            // Write . and .. entries
+            MFS_DirEnt_t dot;
+            dot.inum = inode_num;
+            strcpy(dot.name, ".");
+            write(fd, (char *)&dot, sizeof(dot));
+            MFS_DirEnt_t dot_dot;
+            dot_dot.inum = pinum;
+            strcpy(dot_dot.name, "..");
+            write(fd, (char *)&dot_dot, sizeof(dot_dot));
+            // Write remaining empty entries
+            for (int i = 0; i < (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t)) - 2*sizeof(MFS_DirEnt_t); i++) {
+                MFS_DirEnt_t empty_entry;
+                empty_entry.inum = -1;
+                write(fd, (char *)&empty_entry, sizeof(empty_entry));
+            }
+            int data_block_ptr = cr.log_end_ptr; // Save pointer
+            cr.log_end_ptr = lseek(fd, 0, SEEK_CUR); // Update log end ptr
+
+            // Create new inode
+            struct inode new_node;
+            new_node.size = (cr.log_end_ptr-1) - data_block_ptr;
+            new_node.type = type;
+            for (int i = 0; i < NUM_POINTERS_PER_INODE; i++) {
+                new_node.pointers[i] = -1;
+            }
+            new_node.pointers[0] = data_block_ptr;
+            
+            // Write the new inode
+            int new_node_ptr = lseek(fd, 0, SEEK_CUR);
+            write(fd, (char *)&new_node, sizeof(new_node));
+
+            // Create new version imap piece
+            int new_piece_num = inode_num / NUM_INODES_PER_PIECE;
+            int new_piece_idx = inode_num % NUM_INODES_PER_PIECE;
+            struct imap_piece new_piece = cr_imap_pieces[new_piece_num];
+            new_piece[new_piece_idx] = new_node_ptr;
+            int new_piece_ptr = lseek(fd, 0, SEEK_CUR);
+
+            // Write new imap piece
+            write(fd, (char *)&new_piece, sizeof(new_piece));
+
+            // Save to CR and in memory imap
+            cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
+            cr_imap_pieces[new_piece_num] = new_piece;
+            cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+
+            // Update p data block, p inode and p imap piece (if necessary) 
+            for (int i = 0; i < NUM_POINTERS_PER_INODE; i++) {
+                int dir_entry_written = 0;
+                if (pnode.pointers[i] != -1) {
+                    int data_ptr = pnode.pointers[i];
+                    lseek(fd, data_ptr, SEEK_SET); // Seek to data block
+
+                    // Loop through data block (Should the above check for existence of name be moved here? TODO)
+                    for (int j = 0; j < (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t)); j++) {
+                        MFS_DirEnt_t entry;
+                        read(fd, (char *)&entry, sizeof(MFS_DirEnt_t));
+
+                        if (entry.inum == -1) {
+                            // Insert directory entry
+                            entry.inum = inode_num;
+                            strcpy(entry.name, name);
+
+                            lseek(fd, -sizeof(entry), SEEK_CUR); // Seek back to beggining of this entry
+                            // Write dir entry to data block
+                            write(fd, (char *)&entry, sizeof(entry));
+                            dir_entry_written = 1;
+                            break;
+                        }
+                    }
+                    
+                    if (dir_entry_written)
+                        break;
+                }
+                else if (pnode.pointers[i] == -1 and dir_entry_written != 1) {
+                    // New block needs to be written to/allocated
+                    data_ptr = cr.log_end_ptr;
+                    lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to end of log
+
+                    // Write/allocate data block
+                    // Write first entry in this data block
+                    MFS_DirEnt_t entry;
+                    entry.inum = inode_num;
+                    strcpy(entry.name, name);
+                    write(fd, (char *)&entry, sizeof(entry));
+                    // Write remaining, empty entries
+                    for (int j = 0; j < (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t)) - 1; j++) {
+                        MFS_DirEnt_t empty_entry;
+                        empty_entry.inum = -1;
+                        write(fd, (char *)&empty_entry, sizeof(empty_entry));
+                    }
+
+                    // Update inode
+                    pnode.pointers[i] = data_ptr;
+
+                    // Write new pinode version
+                    int new_pinode_ptr = lseek(fd, 0, SEEK_CUR);
+                    write(fd, (char *)&pnode, sizeof(pnode));
+
+                    // Write new imap piece version
+                    int new_ppiece_ptr = lseek(fd, 0, SEEK_CUR);
+                    ppiece.inode_ptrs[idx] = new_pinode_ptr;
+                    write(fd, (char *)&ppiece, sizeof(ppiece));
+
+                    // Save to CR and in mem imap
+                    cr_imap_pieces[piece_num] = ppiece;
+                    cr.imap_piece_ptrs[piece_num] = new_ppiece_ptr;
+                    cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+                }
+            }
+
+            // Write CR
+            lseek(fd, 0, SEEK_SET);
+            write(fd, (char *)&cr, sizeof(cr));
+            rc = 0;
         }
     }
 
     fsync(fd);
-    return 0; // TODO just 0 good?
+    resp.rc = rc;
+    UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
+    return rc;
 }
 
 int fs_unlink(int pinum, char* name) {
