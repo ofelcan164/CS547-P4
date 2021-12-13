@@ -1,26 +1,28 @@
 CC     := gcc
-CFLAGS := -Wall -Werror 
+CFLAGS := -Wall -Werror -g
+LDFLAGS:= -L. -lmfs
 
-SRCS   := client.c \
-	server.c
+LIB	   := libmfs.c
 
-OBJS   := ${SRCS:c=o}
-PROGS  := ${SRCS:.c=}
+DEPS   := udp.c
 
 .PHONY: all
-all: ${PROGS}
+all: libmfs.so server
 
-${PROGS} : % : %.o Makefile
-	${CC} $< -o $@ udp.c -L. -lmfs
+server: server.o ${DEPS}
+	${CC} ${CFLAGS} -o server server.o ${DEPS}
+
+client: client.o libmfs.so
+	${CC} ${CFLAGS} -o client client.o ${LDFLAGS}
+
+libmfs.so : libmfs.o ${DEPS}
+	${CC} ${CFLAGS} -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o udp.c -lc
 
 clean:
-	rm -f ${PROGS} ${OBJS} libmfs.o libmfs.so
+	rm -f ./client ./server *.o libmfs.so
+
+libmfs.o : ${LIB} Makefile
+	${CC} ${CFLAGS} -c -fPIC ${LIB}
 
 %.o: %.c Makefile
 	${CC} ${CFLAGS} -c $<
-
-
-lib:
-	gcc -fPIC -g -c -Wall libmfs.c
-	gcc -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o -lc
-	export LD_LIBRARY_PATH=.

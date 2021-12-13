@@ -42,7 +42,3 @@ struct inode {
     int type;
     int pointers[NUM_POINTERS_PER_INODE];
 };
-
-struct Dir_Data_Block {
-    struct MFS_DirEnt_t entries[NUM_DIR_ENTRIES_PER_BLOCKS];
-};
