@@ -605,31 +605,34 @@ int main(int argc, char *argv[]) {
 
         if (rc > 0) {
             switch (req.type) {
-            case LOOKUP:
-                fs_lookup(req.pinum, req.name);
-                break;
-            case STAT:
-                fs_stat(req.inum);
-                break;
-            case WRITE:
-                fs_write(req.inum, req.buffer, req.block);
-                break;
-            case READ:
-                fs_read(req.inum, req.block);
-                break;
-            case CREAT:
-                fs_create(req.pinum, req.type, req.name);
-                break;
-            case UNLINK:
-                fs_unlink(req.pinum, req.name);
-                break;
-            case SHUTDOWN:
-                fs_shutdown();
-                break;
-            default:
-                break;
+                case LOOKUP:
+                    fs_lookup(req.pinum, req.name);
+                    break;
+                case STAT:
+                    fs_stat(req.inum);
+                    break;
+                case WRITE:
+                    fs_write(req.inum, req.buffer, req.block);
+                    break;
+                case READ:
+                    fs_read(req.inum, req.block);
+                    break;
+                case CREAT:
+                    fs_create(req.pinum, req.type, req.name);
+                    break;
+                case UNLINK:
+                    fs_unlink(req.pinum, req.name);
+                    break;
+                case SHUTDOWN:
+                    rc = fs_shutdown();
+                    break;
+                default:
+                    break;
             }
         }
+
+        if (rc == -1)
+            return rc;
     }
 
     return 0;
