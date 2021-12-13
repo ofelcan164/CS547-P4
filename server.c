@@ -402,14 +402,17 @@ int fs_unlink(int pinum, char* name) {
             if (pnode.pointers[i] != -1) {
                 lseek(fd, pnode.pointers[i], SEEK_SET); // Seek to the data block
                 // Read directory data block
-                struct MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
+                MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
                 read(fd, (char *)&block, sizeof(block));
+
+                // Loop through dir entries in data block
                 for (int j = 0; j < (NUM_DIR_ENTRIES_PER_BLOCK); j++) {
                     if (block[j].inum != -1) {
+                        // Find name
                         if (strcmp(block[j].name, name) == 0) {
-                            int cur ptr = lseek(fd, 0, SEEK_CUR);
+                            // Get inode to determine type
                             struct inode cur_node;
-                            lseek(fd, cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PEICE], SEEK_SET); // Seek to get inode
+                            lseek(fd, cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PIECE], SEEK_SET); 
                             read(fd, (char *)&cur_node, sizeof(cur_node));
 
                             // Regular File Case
@@ -428,7 +431,7 @@ int fs_unlink(int pinum, char* name) {
 
                                 // Update and write new imap piece
                                 int ppiece_ptr = lseek(fd, 0, SEEK_CUR);
-                                ppiece[idx] = pinode_ptr;
+                                ppiece.inode_ptrs[idx] = pinode_ptr;
                                 write(fd, (char *)&ppiece, sizeof(ppiece));
 
                                 // Update in memory imap and CR
@@ -466,7 +469,7 @@ int fs_shutdown() {
     return 0;
 }
 
-// server code
+// Run the server
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         printf("Usage: prompt> server [portnum] [file-system-image]\n");
@@ -507,7 +510,7 @@ int main(int argc, char *argv[]) {
         int root_data_ptr = lseek(fd, sizeof(cr), SEEK_SET); // Move file image offset TODO where to seek end of inode map or end of CR
         write(fd, (char *)&root_entry_dot, sizeof(root_entry_dot));
         write(fd, (char *)&root_entry_dot_dot, sizeof(root_entry_dot_dot));
-        for (int j = 0; int j < (MFS_BLOCK_SIZE - sizeof(root_entry_dot) - sizeof(root_entry_dot_dot)) / sizeof(MFS_DirEnt_t); j++) {
+        for (int j = 0; j < (MFS_BLOCK_SIZE - sizeof(root_entry_dot) - sizeof(root_entry_dot_dot)) / sizeof(MFS_DirEnt_t); j++) {
             MFS_DirEnt_t new_ent;
 
             new_ent.inum = -1;
