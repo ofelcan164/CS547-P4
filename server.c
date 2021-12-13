@@ -13,7 +13,7 @@ int sd; // Socekt descriptor of server
 struct sockaddr_in addr; // Address of socket for communcation with client
 int fd; // File descriptor of open FS image file
 struct checkpoint_region cr; // Checkpoint region - in memory
-struct imap_piece cr_imap_pieces[NUM_IMAP_PIECES]; // Full imap - array of imap pieces
+struct imap_piece cr_imap_pieces[NUM_IMAP_PIECES]; // Full imap - array of imap pieces // TODO SHOULD BE ARRAY OF INODES NOT PIECES
 
 int fs_lookup(int pinum, char* name) {
     // Nate
@@ -511,6 +511,7 @@ int fs_shutdown() {
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         printf("Usage: prompt> server [portnum] [file-system-image]\n");
+        exit(0);
     }
 
     // Initialize / Setup FS
