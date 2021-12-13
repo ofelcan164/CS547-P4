@@ -27,13 +27,13 @@ struct response {
     char buffer[BUFFER_SIZE];
 };
 
+struct imap_piece {
+    int inode_ptrs[NUM_INODES_PER_PIECE];
+};
+
 struct checkpoint_region {
     int log_end_ptr;
     int imap_piece_ptrs[NUM_IMAP_PIECES];
-};
-
-struct imap_piece {
-    int inode_ptrs[NUM_INODES_PER_PIECE];
 };
 
 struct inode {
