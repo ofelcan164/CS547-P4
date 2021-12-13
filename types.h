@@ -8,6 +8,7 @@
 #define FILENAME_SIZE (28)
 #define NUM_INODES_PER_PIECE (16)
 #define NUM_POINTERS_PER_INODE (14)
+#define NUM_DIR_ENTRIES_PER_BLOCK (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t))
 
 enum req_type {LOOKUP, STAT, WRITE, READ, CREAT, UNLINK, SHUTDOWN};
 
@@ -40,4 +41,8 @@ struct inode {
     int size;
     int type;
     int pointers[NUM_POINTERS_PER_INODE];
+};
+
+struct Dir_Data_Block {
+    struct MFS_DirEnt_t entries[NUM_DIR_ENTRIES_PER_BLOCKS];
 };

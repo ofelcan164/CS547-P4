@@ -61,6 +61,7 @@ int fs_read(int inum, int block) {
  * Failure modes: pinum does not exist, or name is too long. If name already exists, return success (think about why).
  */
 int fs_create(int pinum, int type, char* name) {
+    // TODO USE NUM_DIR_ENTRIES_PER_BLOCK and new struct where possible
     // Name length checked in MFS_Creat
     // Check if pinum exists
     int piece_num = pinum / NUM_INODES_PER_PIECE;
@@ -77,7 +78,6 @@ int fs_create(int pinum, int type, char* name) {
         read(fd, (char *)&pnode, sizeof(pnode));
 
         // Search data blocks for name existing
-        int rc = -1;
         for (int i = 0; i < NUM_POINTERS_PER_INODE; i++ {
             // Loop through this data block
             if (pnode.pointers[i] != -1) {
@@ -365,8 +365,91 @@ int fs_create(int pinum, int type, char* name) {
     return rc;
 }
 
+/**
+ * Removes the file or directory name from the directory specified by pinum. 0 on success, -1 on failure. 
+ * Failure modes: pinum does not exist, directory is NOT empty. 
+ * Note that the name not existing is NOT a failure by our definition (think about why this might be).
+ */
 int fs_unlink(int pinum, char* name) {
-    // Oscar
+    // Check if pinum exists
+    int piece_num = pinum / NUM_INODES_PER_PIECE;
+    int idx = pinum / NUM_INODES_PER_PIECE;
+
+    int rc = -1;
+    struct response resp;
+    if (cr_imap_pieces[piece_num][idx] != -1) {
+        // Pinum exists
+        // Get p imap piece and pinode
+        struct imap_piece ppiece = cr_imap_pieces[piece_num];
+        lseek(fd, ppiece[idx], SEEK_SET);
+        struct inode pnode;
+        read(fd, (char *)&pnode, sizeof(pnode));
+
+        // Search data blocks for name existing
+        rc = 0;
+        for (int i = 0; i < NUM_POINTERS_PER_INODE; i++ {
+            // Loop through this data block
+            if (pnode.pointers[i] != -1) {
+                lseek(fd, pnode.pointers[i], SEEK_SET); // Seek to the data block
+                // Read directory data block
+                struct Dir_Data_Block block;
+                read(fd, (char *)&block, sizeof(block));
+                for (int j = 0; j < (NUM_DIR_ENTRIES_PER_BLOCK); j++) {
+                    if (block[j].inum != -1) {
+                        if (strcmp(block[j].name, name) == 0) {
+                            int cur ptr = lseek(fd, 0, SEEK_CUR);
+                            struct inode cur_node;
+                            lseek(fd, cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE][block[j].inum % NUM_INODES_PER_PEICE], SEEK_SET); // Seek to get inode
+                            read(fd, (char *)&cur_node, sizeof(cur_node));
+
+                            // Regular File Case
+                            if (cur_node.type == MFS_REGULAR_FILE) {
+                                // Just set the inum to be -1
+                                block[j].inum = -1;
+
+                                // Write data block
+                                int data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
+                                write(fd, (char *)&block, sizeof(block));
+
+                                // Update and write pinode
+                                int pinode_ptr = lseek(fd, 0, SEEK_CUR);
+                                pnode.pointers[i] = data_ptr;
+                                write(fd, (char *)&pnode, sizeof(pnode));
+
+                                // Update and write new imap piece
+                                int ppiece_ptr = lseek(fd, 0, SEEK_CUR);
+                                ppiece[idx] = pinode_ptr;
+                                write(fd, (char *)&ppiece, sizeof(ppiece));
+
+                                // Update in memory imap and CR
+                                cr_imap_pieces[ppiece_num] = ppiece;
+                                cr.imap_piece_ptrs[ppiece_num] = ppiece_ptr;
+                                rc = 1;
+                            }
+                            // Directory Case
+                            else {
+                                
+                                break;
+                            }
+                            
+                            
+                        }
+                    }
+                }
+            }
+
+            if (rc != 0) {
+                if (rc == 1) {
+                    rc = 0; // Hacky logic TODO
+                }
+                break;
+            }
+    }
+
+    fsync(fd);
+    resp.rc = rc;
+    UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
+    return rc;
 }
 
 int fs_shutdown() {
