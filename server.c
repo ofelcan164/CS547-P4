@@ -537,7 +537,7 @@ int main(int argc, char *argv[]) {
             }
             cr_imap_pieces[i] = piece;
             int piece_ptr = lseek(fd, 0, SEEK_CUR);
-            cr.imap_piece_ptrs[i] = piece_ptr
+            cr.imap_piece_ptrs[i] = piece_ptr;
         }
 
         // Write out initial, empty CR with valid imap pointers and save log end pointer
@@ -573,7 +573,7 @@ int main(int argc, char *argv[]) {
         }
 
         int root_dir_inode_ptr = lseek(fd, 0, SEEK_CUR);
-        rooot_dir.size = 2*sizeof(MFS_DirEnt_t);
+        root_dir.size = 2*sizeof(MFS_DirEnt_t);
         write(fd, (char *)&root_dir, sizeof(root_dir)); // Write inode
         
         // Update the imap piece
@@ -582,7 +582,7 @@ int main(int argc, char *argv[]) {
         for (int j = 1; j < NUM_INODES_PER_PIECE; j++) {
             root_dir.pointers[j] = -1;
         }
-        
+
         int root_imap_piece_ptr = lseek(fd, 0, SEEK_CUR);
         write(fd, (char *)&root_piece, sizeof(root_piece)); // Write the imap piece
 
