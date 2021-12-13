@@ -566,7 +566,7 @@ int main(int argc, char *argv[]) {
             }
         }
         int root_dir_inode_ptr = lseek(fd, 0, SEEK_CUR);
-        // TODO SIZE IN INODE
+        rooot_dir.size = 2*sizeof(MFS_DirEnt_t);
         write(fd, (char *)&root_dir, sizeof(root_dir));
         
         // Update the imap piece
