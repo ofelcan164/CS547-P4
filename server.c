@@ -493,6 +493,7 @@ int fs_unlink(int pinum, char* name) {
                 }
                 break;
             }
+        }
     }
 
     fsync(fd);
@@ -520,6 +521,7 @@ int main(int argc, char *argv[]) {
 
         // Read checkpoint region
         read(fd, (char *)&cr, sizeof(struct checkpoint_region));
+        // TODO SET UP IMAP
         fsync(fd);
     } else {
         fd = open(argv[2], O_RDWR | O_CREAT); // Open and create image file
