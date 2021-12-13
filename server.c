@@ -427,6 +427,7 @@ int fs_unlink(int pinum, char* name) {
                                 // Update and write pinode
                                 int pinode_ptr = lseek(fd, 0, SEEK_CUR);
                                 pnode.pointers[i] = data_ptr;
+                                pnode.size -= sizeof(MFS_DirEnt_t); // TODO HOW ARE WE TRACKING DIR SIZE
                                 write(fd, (char *)&pnode, sizeof(pnode));
 
                                 // Update and write new imap piece
@@ -437,14 +438,50 @@ int fs_unlink(int pinum, char* name) {
                                 // Update in memory imap and CR
                                 cr_imap_pieces[ppiece_num] = ppiece;
                                 cr.imap_piece_ptrs[ppiece_num] = ppiece_ptr;
+                                cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
                                 rc = 1;
                             }
                             // Directory Case
                             else {
-                                
+                                // Check if directory NOT empty
+                                if (cur_node.size > 2*sizeof(MFS_DirEnt_t)) {
+                                    rc = -1;
+                                    break;
+                                }
+
+                                // Empty directory, remove just like a regular file
+                                // Just set the inum to be -1
+                                block[j].inum = -1;
+
+                                // Write data block
+                                int data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
+                                write(fd, (char *)&block, sizeof(block));
+
+                                // Update and write pinode
+                                int pinode_ptr = lseek(fd, 0, SEEK_CUR);
+                                pnode.pointers[i] = data_ptr;
+                                pnode.size -= sizeof(MFS_DirEnt_t); // TODO HOW ARE WE TRACKING DIR SIZE
+                                write(fd, (char *)&pnode, sizeof(pnode));
+
+                                // Update and write new imap piece
+                                int ppiece_ptr = lseek(fd, 0, SEEK_CUR);
+                                ppiece.inode_ptrs[idx] = pinode_ptr;
+                                write(fd, (char *)&ppiece, sizeof(ppiece));
+
+                                // Update in memory imap and CR
+                                cr_imap_pieces[ppiece_num] = ppiece;
+                                cr.imap_piece_ptrs[ppiece_num] = ppiece_ptr;
+                                cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+                                rc = 1;
                             }
                             
-                            
+                            // Deallocate inode
+                            // Update in memeory piece and CR then write piece
+                            cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PIECE] = -1;
+                            struct imap_piece cur_piece = cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE];
+                            write(fd, (char *)&cur_piece, sizeof(cur_piece));
+                            cr.imap_piece_ptrs[block[j].inum / NUM_INODES_PER_PIECE] = cr.log_end_ptr;
+                            cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
                         }
                     }
                 }
