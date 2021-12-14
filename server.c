@@ -102,6 +102,11 @@ int fs_stat(int inum) {
     return rc;
 }
 
+/**
+ * Writes a block of size 4096 bytes at the block offset specified by block. 
+ * Returns 0 on success, -1 on failure. 
+ * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
+ */
 int fs_write(int inum, char* buffer, int block) {
     // Nate
     return 0;
