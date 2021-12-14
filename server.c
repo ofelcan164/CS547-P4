@@ -31,6 +31,13 @@ int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
     return -1;
 }
 
+/**
+ * Takes the parent inode number (which should be the inode number of a directory) 
+ * and looks up the entry name in it. 
+ * The inode number of name is returned. 
+ * Success: return inode number of name; failure: return -1. 
+ * Failure modes: invalid pinum, name does not exist in pinum.
+ */
 void fs_lookup(int pinum, char* name) { // Nate
     struct inode node = imap[pinum];
 
@@ -86,6 +93,9 @@ int fs_stat(int inum) {
     return rc;
 }
 
+/**
+* Sends failure response to client TODO
+*/
 void sendFailedResponse() {
     struct response res;
     res.rc = -1;
@@ -93,9 +103,13 @@ void sendFailedResponse() {
     return;
 }
 
-//Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories)
-void fs_write(int inum, char* buffer, int block) {
+/**
+ * Writes a block of size 4096 bytes at the block offset specified by block. 
+ * Returns 0 on success, -1 on failure. 
+ * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
+ */
 
+void fs_write(int inum, char* buffer, int block) {
     if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block >= NUM_POINTERS_PER_INODE) {
         sendFailedResponse();
         return;
@@ -144,6 +158,14 @@ void fs_write(int inum, char* buffer, int block) {
     UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
 }
 
+
+/**
+ * Reads a block specified by block into the buffer from file specified by inum. 
+ * The routine should work for either a file or directory;
+ * directories should return data in the format specified by MFS_DirEnt_t. 
+ * Success: 0, failure: -1. 
+ * Failure modes: invalid inum, invalid block.
+ */
 void fs_read(int inum, int block) {
     struct inode node = imap[inum];
 
@@ -645,6 +667,11 @@ int fs_unlink(int pinum, char* name) {
     return rc;
 }
 
+/**
+ * Just tells the server to force all of its data structures to disk and shutdown by calling exit(0). 
+ * This interface will mostly be used for testing purposes.
+ * Returns 0 on success and -1 on failure.
+ */
 int fs_shutdown() {
     printf("Shutting down...\n");
     fsync(fd);
