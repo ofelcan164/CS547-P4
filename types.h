@@ -1,7 +1,7 @@
 #include "udp.h"
 #include "mfs.h"
 
-#define BUFFER_SIZE (1000)
+#define BUFFER_SIZE (4096)
 #define REQ_SIZE (sizeof(struct request))
 #define RESP_SIZE (sizeof(struct response))
 #define NUM_IMAP_PIECES (256)
