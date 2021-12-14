@@ -568,34 +568,28 @@ int main(int argc, char *argv[]) {
             for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
                 piece.inode_ptrs[j] = -1;
             }
-         imap[i] = piece;
             int piece_ptr = lseek(fd, 0, SEEK_CUR);
+            write(fd, (char *)&piece, sizeof(piece));
             cr.imap_piece_ptrs[i] = piece_ptr;
         }
 
-        // Write out initial, empty CR with valid imap pointers and save log end pointer
+        // Write out initial, empty CR with valid imap pointers (and pieces) and save log end pointer
         cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
         lseek(fd, 0, SEEK_SET);
         write(fd, (char *)&cr, sizeof(cr));
 
         // Add root directory
-        MFS_DirEnt_t root_entry_dot;
-        strcpy(root_entry_dot.name, ".");
-        root_entry_dot.inum = 0;
-        MFS_DirEnt_t root_entry_dot_dot;
-        strcpy(root_entry_dot_dot.name, "..");
-        root_entry_dot_dot.inum = 0;
-        
+        MFS_DirEnt_t root_block[NUM_DIR_ENTRIES_PER_BLOCK];
         // Write . and .. entries to the data block and then the remaining empty entries
-        int root_data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET); // Move file image offset
-        write(fd, (char *)&root_entry_dot, sizeof(root_entry_dot));
-        write(fd, (char *)&root_entry_dot_dot, sizeof(root_entry_dot_dot));
-        for (int j = 0; j < (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t)) - 2; j++) {
-            MFS_DirEnt_t new_ent;
-
-            new_ent.inum = -1;
-            write(fd, (char *)&new_ent, sizeof(MFS_DirEnt_t));
+        strcpy(root_block[0].name, ".");
+        root_block[0].inum = 0;
+        strcpy(root_block[1].name, "..");
+        root_block[1].inum = 0;
+        int root_data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to end of imap pieces via log end pointer
+        for (int j = 2; j < NUM_DIR_ENTRIES_PER_BLOCK; j++) {
+            root_block[j].inum = -1;
         }
+        write(fd, (char *)&root_block, sizeof(root_block));        
 
         // Create root directory inode
         struct inode root_dir;
@@ -604,25 +598,33 @@ int main(int argc, char *argv[]) {
         for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
             root_dir.pointers[j] = -1;
         }
-
         int root_dir_inode_ptr = lseek(fd, 0, SEEK_CUR);
-        root_dir.size = 2*sizeof(MFS_DirEnt_t);
+        root_dir.size = 2*sizeof(MFS_DirEnt_t); // TODO
+        for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
+            root_dir.pointers[j] = -1;
+        }
         write(fd, (char *)&root_dir, sizeof(root_dir)); // Write inode
         
         // Update the imap piece
         struct imap_piece root_piece;
         root_piece.inode_ptrs[0] = root_dir_inode_ptr;
         for (int j = 1; j < NUM_INODES_PER_PIECE; j++) {
-            root_dir.pointers[j] = -1;
+            root_piece.inode_ptrs[j] = -1;
         }
-
         int root_imap_piece_ptr = lseek(fd, 0, SEEK_CUR);
         write(fd, (char *)&root_piece, sizeof(root_piece)); // Write the imap piece
 
+        // Update cr
         cr.imap_piece_ptrs[0] = root_imap_piece_ptr;
-     imap[0] = root_piece; // Update in memory imap
         cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
+        // Initialize in memory imap
+        imap[0] = root_dir;
+        for (int j = 1; j < NUM_INODES; j++) {
+            imap[j].size = -1;
+        }
+
+        // Write CR
         lseek(fd, 0, SEEK_SET);
         write(fd, (char *)&cr, sizeof(cr));
         
