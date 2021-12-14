@@ -13,7 +13,7 @@ int sd; // Socekt descriptor of server
 struct sockaddr_in addr; // Address of socket for communcation with client
 int fd; // File descriptor of open FS image file
 struct checkpoint_region cr; // Checkpoint region - in memory
-struct imap_piece cr_imap_pieces[NUM_IMAP_PIECES]; // Full imap - array of imap pieces // TODO SHOULD BE ARRAY OF INODES NOT PIECES
+struct inode imap[NUM_INODES]; // Full imap - array of imap pieces
 
 int fs_lookup(int pinum, char* name) {
     // Nate
@@ -31,15 +31,11 @@ int fs_stat(int inum) {
     MFS_Stat_t m;
 
     // Check for valid inum
-    int piece_num = inum / NUM_INODES_PER_PIECE;
-    int idx = inum % NUM_INODES_PER_PIECE;
     int rc = -1;
-    if (cr_imap_pieces[piece_num].inode_ptrs[idx] != -1) {
-        lseek(fd, cr_imap_pieces[piece_num].inode_ptrs[idx], SEEK_SET);
-        struct inode node;
-        read(fd, (char *)&node, sizeof(node));
-        m.size = node.size+1;
-        m.type = node.type;
+    if  (imap[inum].size > -1) {
+        // Populate stat struct from inode
+        m.size = imap[inum].size;
+        m.type = imap[inum].type;
         rc = 0;
     }
 
@@ -74,30 +70,29 @@ int fs_create(int pinum, int type, char* name) {
     // TODO USE NUM_DIR_ENTRIES_PER_BLOCK and new struct where possible
     // Name length checked in MFS_Creat
     // Check if pinum exists
-    int piece_num = pinum / NUM_INODES_PER_PIECE;
-    int idx = pinum / NUM_INODES_PER_PIECE;
+    int piece_num = pinum / NUM_INODES_PER_PIECE; // TODO nec?
+    // int idx = pinum / NUM_INODES_PER_PIECE; // TODO nec?
 
     int rc = -1;
     struct response resp;
-    if (cr_imap_pieces[piece_num].inode_ptrs[idx] != -1) {
+    if  (imap[pinum].size != -1) {
         // Pinum exists
-        // Get p imap piece and pinode
-        struct imap_piece ppiece = cr_imap_pieces[piece_num];
-        lseek(fd, cr_imap_pieces[piece_num].inode_ptrs[idx], SEEK_SET);
-        struct inode pnode;
-        read(fd, (char *)&pnode, sizeof(pnode));
+        // Get p imap piece and p inode
+        struct imap_piece ppiece = cr.imap_piece_ptrs[piece_num];
+        struct inode pnode = imap[pinum];
 
         // Search data blocks for name existing
         for (int i = 0; i < NUM_POINTERS_PER_INODE; i++) {
             // Loop through this data block
             if (pnode.pointers[i] != -1) {
                 lseek(fd, pnode.pointers[i], SEEK_SET); // Seek to the data block
-                for (int j = 0; j < (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t)); j++) {
-                    MFS_DirEnt_t entry;
-                    read(fd, (char *)&entry, sizeof(MFS_DirEnt_t));
+                MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
+                read(fd, (char *)&block, sizeof(block));
 
-                    if (entry.inum != -1) {
-                        if (strcmp(entry.name, name) == 0) {
+                // Loop through entries
+                for (int j = 0; j < NUM_ENTRIES_PER_BLOCK; j++) {
+                    if (block[j].inum != -1) {
+                        if (strcmp(block[j].name, name) == 0) {
                             rc = 0;
                             break;
                         }
@@ -117,7 +112,7 @@ int fs_create(int pinum, int type, char* name) {
         }
 
         // Send response if no more entries availble in parent
-        if ((pnode.size + 1) / MFS_BLOCK_SIZE / NUM_POINTERS_PER_INODE < 1) { 
+        if (pnode.size == MAX_FILE_SIZE) { 
             resp.rc = -1;
             UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
             return resp.rc;
@@ -125,14 +120,10 @@ int fs_create(int pinum, int type, char* name) {
 
         // Find free inode number
         int inode_num = -1;
-        for (int i = 0; i < NUM_IMAP_PIECES; i++) {
-            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-                if (cr_imap_pieces[i].inode_ptrs[j] == -1) {
-                    inode_num = (i * NUM_INODES_PER_PIECE) + j;
-                    break;
-                }
-            }
-            if (inode_num != -1) {
+        for (int i = 0; i < NUM_INODES; i++) {
+            if (imap[i].size == -1) {
+                // Free inode, save num
+                inode_num = i;
                 break;
             }
         }
@@ -161,19 +152,22 @@ int fs_create(int pinum, int type, char* name) {
             int new_node_ptr = lseek(fd, 0, SEEK_CUR);
             write(fd, (char *)&new_node, sizeof(new_node));
 
-            // Create new version imap piece
+            // Create new version of imap piece
             int new_piece_num = inode_num / NUM_INODES_PER_PIECE;
             int new_piece_idx = inode_num % NUM_INODES_PER_PIECE;
-            struct imap_piece new_piece = cr_imap_pieces[new_piece_num];
-            new_piece.inode_ptrs[new_piece_idx] = new_node_ptr;
-            int new_piece_ptr = lseek(fd, 0, SEEK_CUR);
-
+            // Read in old piece to new piece and update pointer
+            struct imap_piece new_piece;
+            lseek(fd, cr.imap_piece_ptrs[new_piece_num], SEEK_SET);
+            read(fd, (char *)&new_piece, sizeof(new_piece));
+            new_piece.inode_ptrs[new_piece_idx] = new_node_ptr; // Problem where this is already set TODO? I don't think so, if we implement other things correctly
+            
             // Write new imap piece
+            int new_piece_ptr = lseek(fd, 0, SEEK_CUR);
             write(fd, (char *)&new_piece, sizeof(new_piece));
 
             // Save to CR and in memory imap
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
-            cr_imap_pieces[new_piece_num] = new_piece;
+            imap[inode_num] = new_node;
             cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
             // Update p data block, p inode and p imap piece (if necessary) 
@@ -182,9 +176,11 @@ int fs_create(int pinum, int type, char* name) {
                 int data_ptr = pnode.pointers[i];
                 if (data_ptr != -1) {
                     lseek(fd, data_ptr, SEEK_SET); // Seek to data block
-
+                    MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
+                    read(fd, (char *)&block, sizeof(block));
+                    
                     // Loop through data block (Should the above check for existence of name be moved here? TODO)
-                    for (int j = 0; j < (MFS_BLOCK_SIZE / sizeof(MFS_DirEnt_t)); j++) {
+                    for (int j = 0; j < NUM_DIR_ENTRIES_PER_BLOCK; j++) {
                         MFS_DirEnt_t entry;
                         read(fd, (char *)&entry, sizeof(MFS_DirEnt_t));
 
@@ -235,7 +231,7 @@ int fs_create(int pinum, int type, char* name) {
                     write(fd, (char *)&ppiece, sizeof(ppiece));
 
                     // Save to CR and in mem imap
-                    cr_imap_pieces[piece_num] = ppiece;
+                 imap[piece_num] = ppiece;
                     cr.imap_piece_ptrs[piece_num] = new_ppiece_ptr;
                     cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
                 }
@@ -285,7 +281,7 @@ int fs_create(int pinum, int type, char* name) {
             // Create new version imap piece
             int new_piece_num = inode_num / NUM_INODES_PER_PIECE;
             int new_piece_idx = inode_num % NUM_INODES_PER_PIECE;
-            struct imap_piece new_piece = cr_imap_pieces[new_piece_num];
+            struct imap_piece new_piece = imap[new_piece_num];
             new_piece.inode_ptrs[new_piece_idx] = new_node_ptr;
             int new_piece_ptr = lseek(fd, 0, SEEK_CUR);
 
@@ -294,7 +290,7 @@ int fs_create(int pinum, int type, char* name) {
 
             // Save to CR and in memory imap
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
-            cr_imap_pieces[new_piece_num] = new_piece;
+         imap[new_piece_num] = new_piece;
             cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
             // Update p data block, p inode and p imap piece (if necessary) 
@@ -356,7 +352,7 @@ int fs_create(int pinum, int type, char* name) {
                     write(fd, (char *)&ppiece, sizeof(ppiece));
 
                     // Save to CR and in mem imap
-                    cr_imap_pieces[piece_num] = ppiece;
+                 imap[piece_num] = ppiece;
                     cr.imap_piece_ptrs[piece_num] = new_ppiece_ptr;
                     cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
                 }
@@ -387,10 +383,10 @@ int fs_unlink(int pinum, char* name) {
 
     int rc = -1;
     struct response resp;
-    if (cr_imap_pieces[ppiece_num].inode_ptrs[idx] != -1) {
+    if  imap[ppiece_num].inode_ptrs[idx] != -1) {
         // Pinum exists
         // Get p imap piece and pinode
-        struct imap_piece ppiece = cr_imap_pieces[ppiece_num];
+        struct imap_piece ppiece = imap[ppiece_num];
         lseek(fd, ppiece.inode_ptrs[idx], SEEK_SET);
         struct inode pnode;
         read(fd, (char *)&pnode, sizeof(pnode));
@@ -412,7 +408,7 @@ int fs_unlink(int pinum, char* name) {
                         if (strcmp(block[j].name, name) == 0) {
                             // Get inode to determine type
                             struct inode cur_node;
-                            lseek(fd, cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PIECE], SEEK_SET); 
+                            lseek(fd, imap[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PIECE], SEEK_SET); 
                             read(fd, (char *)&cur_node, sizeof(cur_node));
 
                             // Regular File Case
@@ -436,7 +432,7 @@ int fs_unlink(int pinum, char* name) {
                                 write(fd, (char *)&ppiece, sizeof(ppiece));
 
                                 // Update in memory imap and CR
-                                cr_imap_pieces[ppiece_num] = ppiece;
+                             imap[ppiece_num] = ppiece;
                                 cr.imap_piece_ptrs[ppiece_num] = ppiece_ptr;
                                 cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
                                 rc = 1;
@@ -469,7 +465,7 @@ int fs_unlink(int pinum, char* name) {
                                 write(fd, (char *)&ppiece, sizeof(ppiece));
 
                                 // Update in memory imap and CR
-                                cr_imap_pieces[ppiece_num] = ppiece;
+                             imap[ppiece_num] = ppiece;
                                 cr.imap_piece_ptrs[ppiece_num] = ppiece_ptr;
                                 cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
                                 rc = 1;
@@ -477,8 +473,8 @@ int fs_unlink(int pinum, char* name) {
                             
                             // Deallocate inode
                             // Update in memeory piece and CR then write piece
-                            cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PIECE] = -1;
-                            struct imap_piece cur_piece = cr_imap_pieces[block[j].inum / NUM_INODES_PER_PIECE];
+                         imap[block[j].inum / NUM_INODES_PER_PIECE].inode_ptrs[block[j].inum % NUM_INODES_PER_PIECE] = -1;
+                            struct imap_piece cur_piece = imap[block[j].inum / NUM_INODES_PER_PIECE];
                             write(fd, (char *)&cur_piece, sizeof(cur_piece));
                             cr.imap_piece_ptrs[block[j].inum / NUM_INODES_PER_PIECE] = cr.log_end_ptr;
                             cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
@@ -538,7 +534,7 @@ int main(int argc, char *argv[]) {
             for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
                 piece.inode_ptrs[j] = -1;
             }
-            cr_imap_pieces[i] = piece;
+         imap[i] = piece;
             int piece_ptr = lseek(fd, 0, SEEK_CUR);
             cr.imap_piece_ptrs[i] = piece_ptr;
         }
@@ -590,7 +586,7 @@ int main(int argc, char *argv[]) {
         write(fd, (char *)&root_piece, sizeof(root_piece)); // Write the imap piece
 
         cr.imap_piece_ptrs[0] = root_imap_piece_ptr;
-        cr_imap_pieces[0] = root_piece; // Update in memory imap
+     imap[0] = root_piece; // Update in memory imap
         cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
         lseek(fd, 0, SEEK_SET);
