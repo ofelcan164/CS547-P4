@@ -51,7 +51,7 @@ void fs_lookup(int pinum, char* name) { // Nate
     res.rc = inodeNumber;
 
     // write response
-    int writeResult = UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+    UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
 
     return;
 }
@@ -86,13 +86,18 @@ int fs_stat(int inum) {
     return rc;
 }
 
+void sendFailedResponse() {
+    struct response res;
+    res.rc = -1;
+    UDP_Write(fd, &addr, (char *) &res, sizeof(RESP_SIZE));
+    return;
+}
+
 //Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories)
 void fs_write(int inum, char* buffer, int block) {
 
     if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block >= NUM_POINTERS_PER_INODE) {
-        struct response res;
-        res.rc = -1;
-        UDP_Write(fd, &addr, (char *) &res, sizeof(RESP_SIZE));
+        sendFailedResponse();
         return;
     }
 
@@ -102,12 +107,12 @@ void fs_write(int inum, char* buffer, int block) {
     lseek(fd, imapPieceLocation, SEEK_SET);
     struct imap_piece imapPiece;
     int bytesRead = read(fd, &imapPiece, sizeof(struct imap_piece));
-    assert (bytesRead > -1);
+    if (bytesRead > -1) sendFailedResponse();
 
     // write block to end of FS
     int newBlockLocation = lseek(fd, cr.log_end_ptr, SEEK_SET);
     int bytesWritten = write(fd, buffer, BUFFER_SIZE);
-    assert (bytesWritten > -1);
+    if (bytesWritten > -1) sendFailedResponse();
 
     // update inode in memory imap
     imap[inum].pointers[block] = newBlockLocation;
@@ -115,13 +120,13 @@ void fs_write(int inum, char* buffer, int block) {
     // write indoe with new ptr to block location
     int newInodeLocation = lseek(fd, 0, SEEK_CUR);
     bytesWritten = write(fd, &imap[inum], sizeof(struct inode));
-    assert (bytesWritten > -1);
+    if (bytesWritten > -1) sendFailedResponse();
 
     // write new imap piece with new ptr to inode
     int newImapPieceLocation = lseek(fd, 0, SEEK_CUR);
     imapPiece.inode_ptrs[(inum % 16)] = newInodeLocation;
     bytesWritten = write(fd, &imapPiece, sizeof(struct imap_piece));
-    assert (bytesWritten > -1);
+    if (bytesWritten > -1) sendFailedResponse();
 
     // update CR in memory with new imap piece location and end ptr
     cr.imap_piece_ptrs[impaPieceIndex] = newImapPieceLocation;
@@ -130,13 +135,13 @@ void fs_write(int inum, char* buffer, int block) {
     // write CR
     lseek(fd, 0, SEEK_SET);
     bytesWritten = write(fd, &cr, sizeof(struct checkpoint_region));
-    assert (bytesWritten > -1);
+    if (bytesWritten > -1) sendFailedResponse();
 
     // res message
     struct response res;
     res.rc = 0;
 
-    int writeResult = UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+    UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
 }
 
 void fs_read(int inum, int block) {
@@ -160,7 +165,7 @@ void fs_read(int inum, int block) {
     res.rc = 0;
     
     // write back response
-    int writeResult = UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+    UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
 
     return;
 }
