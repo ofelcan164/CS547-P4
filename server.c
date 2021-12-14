@@ -67,15 +67,14 @@ int fs_read(int inum, int block) {
  * Failure modes: pinum does not exist, or name is too long. If name already exists, return success (think about why).
  */
 int fs_create(int pinum, int type, char* name) {
-    // TODO USE NUM_DIR_ENTRIES_PER_BLOCK and new struct where possible
     // Name length checked in MFS_Creat
     // Check if pinum exists
     int piece_num = pinum / NUM_INODES_PER_PIECE;
-    int idx = pinum / NUM_INODES_PER_PIECE;
+    int idx = pinum % NUM_INODES_PER_PIECE;
 
     int rc = -1;
     struct response resp;
-    if  (imap[pinum].size != -1) {
+    if (imap[pinum].size != -1) {
         // Pinum exists
         // Get p imap piece and p inode
         struct imap_piece ppiece;
@@ -113,7 +112,7 @@ int fs_create(int pinum, int type, char* name) {
             return rc;
         }
 
-        // Send response if no more entries availble in parent
+        // Send response if no more entries availble in parent TODO
         if (pnode.size == MAX_FILE_SIZE) { 
             resp.rc = -1;
             UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
@@ -675,7 +674,7 @@ int main(int argc, char *argv[]) {
                     fs_read(req.inum, req.block);
                     break;
                 case CREAT:
-                    fs_create(req.pinum, req.type, req.name);
+                    fs_create(req.pinum, req.file_type, req.name);
                     break;
                 case UNLINK:
                     fs_unlink(req.pinum, req.name);
