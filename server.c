@@ -15,9 +15,54 @@ int fd; // File descriptor of open FS image file
 struct checkpoint_region cr; // Checkpoint region - in memory
 struct inode imap[NUM_INODES]; // Full imap - array of imap pieces
 
-int fs_lookup(int pinum, char* name) {
-    // Nate
-    return 0;
+int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
+    lseek(fd, blockLocation, SEEK_SET);
+
+    for (int i = 0; i < (MFS_BLOCK_SIZE); i+= sizeof(MFS_DirEnt_t)) {
+        MFS_DirEnt_t entry;
+        
+        read(fd, &entry, sizeof(MFS_DirEnt_t));
+        
+        //debug
+        printf(
+            "DEBUG\nCurrent file offset: %d\nCurrent entry number: %d\nCurrent entry's name: %s\nCurrent entry's inum: %d\n", 
+            (int) lseek(fd, 0, SEEK_CUR),
+            i/32,
+            (char *) entry.name,
+            entry.inum
+        );
+
+        if (strcmp(entry.name, name) == 0) {
+            return entry.inum;
+        }
+    }
+
+    return -1;
+}
+
+void fs_lookup(int pinum, char* name) { // Nate
+    struct inode node = imap[pinum];
+
+    int inodeNumber = -1;
+
+    for (int i = 0; i < NUM_POINTERS_PER_INODE; i++) {
+        if (node.pointers[i] != -1) {
+            int num = checkDataBlockForMatchingEntry(node.pointers[i], name);
+            if (num > -1) {
+                inodeNumber = num;
+                break;
+            }
+        }
+    }
+
+    // res struct and use response code to send back inodeNumber.
+    struct response res;
+    res.rc = inodeNumber;
+
+    // write response
+    int writeResult = UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+
+    return;
 }
 
 /**
@@ -55,9 +100,30 @@ int fs_write(int inum, char* buffer, int block) {
     return 0;
 }
 
-int fs_read(int inum, int block) {
-    // Nate
-    return 0;
+void fs_read(int inum, int block) {
+    struct inode node = imap[inum];
+
+    // Get data block location
+    int blockLocation = node.pointers[block];
+
+    // reposition file offset
+    lseek(fd, blockLocation, SEEK_SET);
+
+    // create struct for response
+    struct response res;
+    
+    // read data block into res buffer
+    int bytesRead = read(fd, res.buffer, BUFFER_SIZE);
+
+    assert (bytesRead > -1);
+
+    // set response code
+    res.rc = 0;
+    
+    // write back response
+    int writeResult = UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+
+    return;
 }
 
 /**
@@ -536,8 +602,11 @@ int fs_unlink(int pinum, char* name) {
 }
 
 int fs_shutdown() {
-    // Nate
-    return 0;
+    printf("Shutting down...\n");
+    fsync(fd);
+    close(fd);
+    UDP_Close(sd);
+    exit(0);
 }
 
 // Run the server
