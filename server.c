@@ -550,9 +550,27 @@ int main(int argc, char *argv[]) {
     if (access(argv[2], F_OK) == 0) {
         fd = open(argv[2], O_RDWR); // Open image file
 
-        // Read checkpoint region
+        // Read in checkpoint region
+        lseek(fd, 0, SEEK_SET);
         read(fd, (char *)&cr, sizeof(struct checkpoint_region));
-        // TODO SET UP IMAP
+        
+        // Loop through imap pieces and set up in memory imap
+        for (int i = 0; i < NUM_IMAP_PIECES; i++;) {
+            // Read the piece
+            struct imap_piece piece;
+            lseek(fd, cr.imap_piece_ptrs[i], SEEK_SET);
+            read(fd, (char *)&piece, sizeof(piece));
+            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+                struct inode node;
+                lseek(fd, piece[j], SEEK_SET);
+                read(fd, (char *)&inode, sizeof(inode));
+
+                int inode_num = i * NUM_INODES_PER_PIECE + j;
+                imap[inode_num] = node;
+            }
+        }
+
+        // Force to disk
         fsync(fd);
     } else {
         fd = open(argv[2], O_RDWR | O_CREAT); // Open and create image file
