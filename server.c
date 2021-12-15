@@ -811,9 +811,7 @@ int main(int argc, char *argv[]) {
     while (1) {
         struct request req;
         int bytesRead = UDP_Read(sd, &addr, (char *) &req, REQ_SIZE);
-
-        assert (bytesRead > -1);
-
+        
         switch (req.type) {
             case LOOKUP:
                 fs_lookup(req.pinum, req.name);
