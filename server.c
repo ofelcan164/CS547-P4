@@ -215,7 +215,7 @@ int fs_create(int pinum, int type, char* name) {
 
     int rc = -1;
     struct response resp;
-    if (imap[pinum].size != -1) {
+    if (imap[pinum].size != -1 && imap[pinum].type == MFS_DIRECTORY) {
         // Pinum exists
         // Get p imap piece and p inode
         struct imap_piece ppiece;
@@ -682,7 +682,6 @@ int fs_unlink(int pinum, char* name) {
  * Returns 0 on success and -1 on failure.
  */
 int fs_shutdown() {
-    printf("Shutting down...\n");
     fsync(fd);
     close(fd);
     UDP_Close(sd);
