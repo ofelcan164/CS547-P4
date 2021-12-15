@@ -139,6 +139,9 @@ void fs_write(int inum, char* buffer, int block) {
     // write new imap piece with new ptr to inode
     int newImapPieceLocation = lseek(fd, 0, SEEK_CUR);
     imapPiece.inode_ptrs[(inum % 16)] = newInodeLocation;
+
+    // TODO: Change size field of inode
+
     bytesWritten = write(fd, &imapPiece, sizeof(struct imap_piece));
     if (bytesWritten > -1) sendFailedResponse();
 
@@ -167,6 +170,11 @@ void fs_write(int inum, char* buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 void fs_read(int inum, int block) {
+    if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block >= NUM_POINTERS_PER_INODE) {
+        sendFailedResponse();
+        return;
+    }
+
     struct inode node = imap[inum];
 
     // Get data block location
@@ -179,7 +187,7 @@ void fs_read(int inum, int block) {
     struct response res;
     
     // read data block into res buffer
-    int bytesRead = read(fd, res.buffer, BUFFER_SIZE);
+    int bytesRead = read(fd, &res.buffer, BUFFER_SIZE);
 
     assert (bytesRead > -1);
 
