@@ -133,7 +133,7 @@ void fs_write(int inum, char* buffer, int block) {
 
     // write indoe with new ptr to block location
     int newInodeLocation = lseek(fd, 0, SEEK_CUR);
-    bytesWritten = write(fd, &imap[inum], sizeof(struct inode));
+    bytesWritten = write(fd, (char *)&(imap[inum]), sizeof(struct inode));
     if (bytesWritten > -1) sendFailedResponse();
 
     // write new imap piece with new ptr to inode
@@ -187,15 +187,15 @@ void fs_read(int inum, int block) {
     struct response res;
     
     // read data block into res buffer
-    int bytesRead = read(fd, &res.buffer, BUFFER_SIZE);
+    int bytesRead = read(fd, (char *)&(res.buffer), BUFFER_SIZE);
 
-    assert (bytesRead > -1);
+    if (bytesRead < -1) sendFailedResponse;
 
     // set response code
     res.rc = 0;
     
     // write back response
-    UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+    UDP_Write(sd, &addr, (char *)&res, RESP_SIZE);
 
     return;
 }
