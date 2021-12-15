@@ -121,29 +121,30 @@ void fs_write(int inum, char* buffer, int block) {
     lseek(fd, imapPieceLocation, SEEK_SET);
     struct imap_piece imapPiece;
     int bytesRead = read(fd, &imapPiece, sizeof(struct imap_piece));
-    if (bytesRead > -1) sendFailedResponse();
+    if (bytesRead < 0) sendFailedResponse();
 
     // write block to end of FS
     int newBlockLocation = lseek(fd, cr.log_end_ptr, SEEK_SET);
     int bytesWritten = write(fd, buffer, BUFFER_SIZE);
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // update inode in memory imap
     imap[inum].pointers[block] = newBlockLocation;
+    int previousLastBlock = imap[inum].size / MFS_BLOCK_SIZE;
+    if (previousLastBlock <= block) {
+        imap[inum].size = (block + 1) * MFS_BLOCK_SIZE;
+    }
 
     // write indoe with new ptr to block location
     int newInodeLocation = lseek(fd, 0, SEEK_CUR);
     bytesWritten = write(fd, (char *)&(imap[inum]), sizeof(struct inode));
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // write new imap piece with new ptr to inode
     int newImapPieceLocation = lseek(fd, 0, SEEK_CUR);
     imapPiece.inode_ptrs[(inum % 16)] = newInodeLocation;
-
-    // TODO: Change size field of inode
-
     bytesWritten = write(fd, &imapPiece, sizeof(struct imap_piece));
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // update CR in memory with new imap piece location and end ptr
     cr.imap_piece_ptrs[impaPieceIndex] = newImapPieceLocation;
@@ -152,7 +153,7 @@ void fs_write(int inum, char* buffer, int block) {
     // write CR
     lseek(fd, 0, SEEK_SET);
     bytesWritten = write(fd, &cr, sizeof(struct checkpoint_region));
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // res message
     struct response res;
@@ -189,7 +190,7 @@ void fs_read(int inum, int block) {
     // read data block into res buffer
     int bytesRead = read(fd, (char *)&(res.buffer), BUFFER_SIZE);
 
-    if (bytesRead < -1) sendFailedResponse;
+    if (bytesRead < 0) sendFailedResponse();
 
     // set response code
     res.rc = 0;
