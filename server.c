@@ -810,7 +810,7 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         struct request req;
-        int bytesRead = UDP_Read(sd, &addr, (char *) &req, REQ_SIZE);
+        UDP_Read(sd, &addr, (char *) &req, REQ_SIZE);
         
         switch (req.type) {
             case LOOKUP:
