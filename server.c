@@ -121,7 +121,10 @@ void fs_write(int inum, char* buffer, int block) {
     lseek(fd, imapPieceLocation, SEEK_SET);
     struct imap_piece imapPiece;
     int bytesRead = read(fd, &imapPiece, sizeof(struct imap_piece));
-    if (bytesRead == -1) sendFailedResponse();
+    if (bytesRead == -1) {
+        sendFailedResponse();
+        return;
+    }
 
     // write block to end of FS
     int newBlockLocation = lseek(fd, cr.log_end_ptr, SEEK_SET);
@@ -383,6 +386,7 @@ int fs_create(int pinum, int type, char* name) {
             // If never wrote a new entry, failue and don't save anything to CR
             if (dir_entry_written == 0) {
                 sendFailedResponse();
+                return;
             }
             // Save to CR and in memory imap TODO 
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
@@ -522,6 +526,7 @@ int fs_create(int pinum, int type, char* name) {
             // If never wrote a new entry, failue and don't save anything to CR
             if (dir_entry_written == 0) {
                 sendFailedResponse();
+                return;
             }
             // Save to CR and in memory imap TODO
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
