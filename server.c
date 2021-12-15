@@ -775,23 +775,49 @@ void loadFS() {
     // Read in checkpoint region
     lseek(fd, 0, SEEK_SET);
     read(fd, (char *)&cr, sizeof(struct checkpoint_region));
+
+    // Set in memory imap to all invalid inodes
+    for (int i = 0; i < NUM_INODES; i++) {
+        struct inode inval;
+        inval.size = -1;
+        imap[i] = inval;
+    }
     
     // Loop through imap pieces and set up in memory imap
     for (int i = 0; i < NUM_IMAP_PIECES; i++) {
+        if (cr.imap_piece_ptrs[i] == -1) {
+            // Create neww empty piece
+            struct imap_piece piece;
+            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+                piece.inode_ptrs[j] = -1;
+            }
+
+            // Seek to end of log and write new piece
+            int new_piece_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
+            write(fd, (char *)&piece, sizeof(piece));
+
+            // Set CR
+            cr.imap_piece_ptrs[i] = new_piece_ptr;
+            cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+
+            // Continue
+            continue;
+        }
+
         // Read the piece
         struct imap_piece piece;
         lseek(fd, cr.imap_piece_ptrs[i], SEEK_SET);
         read(fd, (char *)&piece, sizeof(struct imap_piece));
         for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-            struct inode node;
-            lseek(fd, piece.inode_ptrs[j], SEEK_SET);
-            read(fd, (char *)&node, sizeof(struct inode));
+            if (piece.inode_ptrs[j] != -1) {
+                struct inode node;
+                lseek(fd, piece.inode_ptrs[j], SEEK_SET);
+                read(fd, (char *)&node, sizeof(struct inode));
 
-            int inode_num = i * NUM_INODES_PER_PIECE + j;
-            imap[inode_num] = node;
-            memset(&node, 0, sizeof(struct inode));
+                int inode_num = i * NUM_INODES_PER_PIECE + j;
+                imap[inode_num] = node;
+            }
         }
-        memset(&piece, 0, sizeof(struct imap_piece));
     }
 }
 
