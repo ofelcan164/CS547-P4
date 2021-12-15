@@ -2,7 +2,7 @@
 #include "udp.h"
 #include "types.h"
 
-#define CLIENT_PORT (20000)
+#define CLIENT_PORT (12984)
 
 int sd = -2; // should not be set to this in UDP_Open().
 struct sockaddr_in addrSnd, addrRcv;
@@ -122,7 +122,7 @@ int MFS_Write(int inum, char *buffer, int block) {
     req.type = WRITE;
     req.inum = inum;
     req.block = block;
-    strcpy(req.buffer, buffer);
+    memcpy(req.buffer, buffer, MFS_BLOCK_SIZE);
 
     int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
 
@@ -187,7 +187,7 @@ int MFS_Read(int inum, char *buffer, int block) {
         return -1;
     }
 
-    strcpy(buffer, res.buffer); //TODO: want to make sure room to copy and no overflow happening here.
+    memcpy(buffer, res.buffer, MFS_BLOCK_SIZE); //TODO: want to make sure room to copy and no overflow happening here.
 
     return res.rc;
 }

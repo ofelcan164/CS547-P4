@@ -126,24 +126,25 @@ void fs_write(int inum, char* buffer, int block) {
     // write block to end of FS
     int newBlockLocation = lseek(fd, cr.log_end_ptr, SEEK_SET);
     int bytesWritten = write(fd, buffer, BUFFER_SIZE);
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // update inode in memory imap
     imap[inum].pointers[block] = newBlockLocation;
+    int previousLastBlock = imap[inum].size / MFS_BLOCK_SIZE;
+    if (previousLastBlock <= block) {
+        imap[inum].size = (block + 1) * MFS_BLOCK_SIZE;
+    }
 
     // write indoe with new ptr to block location
     int newInodeLocation = lseek(fd, 0, SEEK_CUR);
     bytesWritten = write(fd, (char *)&(imap[inum]), sizeof(struct inode));
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // write new imap piece with new ptr to inode
     int newImapPieceLocation = lseek(fd, 0, SEEK_CUR);
     imapPiece.inode_ptrs[(inum % 16)] = newInodeLocation;
-
-    // TODO: Change size field of inode
-
     bytesWritten = write(fd, &imapPiece, sizeof(struct imap_piece));
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // update CR in memory with new imap piece location and end ptr
     cr.imap_piece_ptrs[impaPieceIndex] = newImapPieceLocation;
@@ -152,7 +153,7 @@ void fs_write(int inum, char* buffer, int block) {
     // write CR
     lseek(fd, 0, SEEK_SET);
     bytesWritten = write(fd, &cr, sizeof(struct checkpoint_region));
-    if (bytesWritten > -1) sendFailedResponse();
+    if (bytesWritten < 0) sendFailedResponse();
 
     // res message
     struct response res;
@@ -213,7 +214,7 @@ int fs_create(int pinum, int type, char* name) {
 
     int rc = -1;
     struct response resp;
-    if (imap[pinum].size != -1) {
+    if (imap[pinum].size != -1 && imap[pinum].type == MFS_DIRECTORY) {
         // Pinum exists
         // Get p imap piece and p inode
         struct imap_piece ppiece;
@@ -595,7 +596,7 @@ int fs_unlink(int pinum, char* name) {
                                 // Read directory data block
                                 MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
                                 read(fd, (char *)&block, sizeof(block));
-                                for (int k = 0; k < NUM_DIR_ENTRIES_PER_BLOCK) {
+                                for (int k = 0; k < NUM_DIR_ENTRIES_PER_BLOCK; k++) {
                                     if (block[k].inum != -1) { 
                                         if (!(strcmp(block[k].name, ".") == 0 || strcmp(block[k].name, "..") == 0)) {
                                             // Non-. and .. entry exists, so not full
@@ -621,7 +622,7 @@ int fs_unlink(int pinum, char* name) {
                                 } 
                                 else {
                                     // Deallocate this block
-                                    data_ptr = -1
+                                    data_ptr = -1;
                                     lseek(fd, cr.log_end_ptr, SEEK_SET);
                                     pnode.size -= MFS_BLOCK_SIZE;
                                 }
@@ -684,7 +685,6 @@ int fs_unlink(int pinum, char* name) {
  * Returns 0 on success and -1 on failure.
  */
 int fs_shutdown() {
-    printf("Shutting down...\n");
     fsync(fd);
     close(fd);
     UDP_Close(sd);
