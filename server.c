@@ -401,7 +401,7 @@ int fs_create(int pinum, int type, char* name) {
             // If never wrote a new entry, failue and don't save anything to CR
             if (dir_entry_written == 0) {
                 sendFailedResponse();
-                return;
+                return -1;
             }
             // Save to CR and in memory imap TODO 
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
@@ -794,7 +794,7 @@ void initNewFS() {
 void loadFS() {
     // Read in checkpoint region
     lseek(fd, 0, SEEK_SET);
-    read(fd, (char *)&cr, sizeof(struct checkpoint_region));
+    read(fd, (char *)&cr, sizeof(cr));
 
     // Set in memory imap to all invalid inodes
     for (int i = 0; i < NUM_INODES; i++) {
