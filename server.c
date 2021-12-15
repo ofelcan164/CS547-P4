@@ -110,7 +110,7 @@ void sendFailedResponse() {
  */
 
 void fs_write(int inum, char* buffer, int block) {
-    if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block >= NUM_POINTERS_PER_INODE) {
+    if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block > (NUM_POINTERS_PER_INODE - 1)) {
         sendFailedResponse();
         return;
     }
@@ -129,7 +129,10 @@ void fs_write(int inum, char* buffer, int block) {
     // write block to end of FS
     int newBlockLocation = lseek(fd, cr.log_end_ptr, SEEK_SET);
     int bytesWritten = write(fd, buffer, BUFFER_SIZE);
-    if (bytesWritten < 0) sendFailedResponse();
+    if (bytesWritten < 0) {
+        sendFailedResponse();
+        return;
+    }
 
     // update inode in memory imap
     imap[inum].pointers[block] = newBlockLocation;
@@ -141,13 +144,19 @@ void fs_write(int inum, char* buffer, int block) {
     // write indoe with new ptr to block location
     int newInodeLocation = lseek(fd, 0, SEEK_CUR);
     bytesWritten = write(fd, (char *)&(imap[inum]), sizeof(struct inode));
-    if (bytesWritten < 0) sendFailedResponse();
+    if (bytesWritten < 0) {
+        sendFailedResponse();
+        return;
+    }
 
     // write new imap piece with new ptr to inode
     int newImapPieceLocation = lseek(fd, 0, SEEK_CUR);
     imapPiece.inode_ptrs[(inum % 16)] = newInodeLocation;
     bytesWritten = write(fd, &imapPiece, sizeof(struct imap_piece));
-    if (bytesWritten < 0) sendFailedResponse();
+    if (bytesWritten < 0) {
+        sendFailedResponse();
+        return;
+    }
 
     // update CR in memory with new imap piece location and end ptr
     cr.imap_piece_ptrs[impaPieceIndex] = newImapPieceLocation;
@@ -156,7 +165,10 @@ void fs_write(int inum, char* buffer, int block) {
     // write CR
     lseek(fd, 0, SEEK_SET);
     bytesWritten = write(fd, &cr, sizeof(struct checkpoint_region));
-    if (bytesWritten < 0) sendFailedResponse();
+    if (bytesWritten < 0) {
+        sendFailedResponse();
+        return;
+    }
 
     // res message
     struct response res;
@@ -174,7 +186,7 @@ void fs_write(int inum, char* buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 void fs_read(int inum, int block) {
-    if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block >= NUM_POINTERS_PER_INODE) {
+    if (imap[inum].size < 0 || imap[inum].type != MFS_REGULAR_FILE || block < 0 || block > (NUM_POINTERS_PER_INODE - 1)) {
         sendFailedResponse();
         return;
     }
@@ -192,7 +204,10 @@ void fs_read(int inum, int block) {
     
     // read data block into res buffer
     int bytesRead = read(fd, (char *)&(res.buffer), BUFFER_SIZE);
-    if (bytesRead == -1) sendFailedResponse();
+    if (bytesRead == -1) {
+        sendFailedResponse();
+        return;
+    }
 
     // set response code
     res.rc = 0;
@@ -526,7 +541,7 @@ int fs_create(int pinum, int type, char* name) {
             // If never wrote a new entry, failue and don't save anything to CR
             if (dir_entry_written == 0) {
                 sendFailedResponse();
-                return;
+                return -1;
             }
             // Save to CR and in memory imap TODO
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
