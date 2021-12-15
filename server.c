@@ -188,8 +188,7 @@ void fs_read(int inum, int block) {
     
     // read data block into res buffer
     int bytesRead = read(fd, (char *)&(res.buffer), BUFFER_SIZE);
-
-    if (bytesRead == -1) sendFailedResponse;
+    if (bytesRead == -1) sendFailedResponse();
 
     // set response code
     res.rc = 0;
