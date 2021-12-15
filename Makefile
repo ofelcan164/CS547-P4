@@ -16,7 +16,7 @@ client: client.o libmfs.so
 	${CC} ${CFLAGS} -o client client.o ${LDFLAGS}
 
 libmfs.so : libmfs.o ${DEPS}
-	${CC} ${CFLAGS} -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o udp.c -lc
+	${CC} -fPIC -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o udp.c -lc
 
 clean:
 	rm -f ./client ./server *.o libmfs.so
