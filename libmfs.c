@@ -239,6 +239,10 @@ int MFS_Creat(int pinum, int type, char *name) {
  * Note that the name not existing is NOT a failure by our definition (think about why this might be).
  */
 int MFS_Unlink(int pinum, char *name) {
+    // Check name
+    if (strlen(name) > 28)
+        return -1;
+        
     // Fill struct to send
     struct request req;
     req.type = UNLINK;
