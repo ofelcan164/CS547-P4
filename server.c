@@ -316,12 +316,8 @@ int fs_create(int pinum, int type, char* name) {
             new_piece.inode_ptrs[new_piece_idx] = new_node_ptr; // Problem where this is already set TODO? I don't think so, if we implement other things correctly
             
             // Write new imap piece
+            lseek(fd, new_piece_ptr, SEEK_SET);
             write(fd, (char *)&new_piece, sizeof(new_piece));
-
-            // Save to CR and in memory imap
-            cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
-            imap[inode_num] = new_node;
-            cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
             // Update p data block, p inode and p imap piece (if necessary) 
             for (int i = 0; i < NUM_POINTERS_PER_INODE; i++) {
@@ -402,25 +398,32 @@ int fs_create(int pinum, int type, char* name) {
                 }
             }
 
-            rc = 0;
+            // If never wrote a new entry, failue and don't save anything to CR
+            if (dir_entry_written == 0) {
+                sendFailedResponse();
+                return;
+            }
+            // Save to CR and in memory imap TODO 
+            cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
+            imap[inode_num] = new_node;
 
         } else if (type == MFS_DIRECTORY) {
             // Create directory
 
             // Create new data block for directory
-            lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to log end
-
             // Write . and .. entries
             MFS_DirEnt_t new_dir_block[NUM_DIR_ENTRIES_PER_BLOCK];
+
             new_dir_block[0].inum = inode_num;
             strcpy(new_dir_block[0].name, ".");
+
             new_dir_block[1].inum = pinum;
             strcpy(new_dir_block[1].name, "..");
             // Write remaining empty entries
             for (int i = 2; i < NUM_DIR_ENTRIES_PER_BLOCK; i++) {
                 new_dir_block[i].inum = -1;
             }
-            int new_dir_block_ptr = lseek(fd, 0, SEEK_CUR);
+            int new_dir_block_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to log end
             write(fd, (char *)&new_dir_block, sizeof(new_dir_block));
 
             // Create new inode
@@ -433,7 +436,6 @@ int fs_create(int pinum, int type, char* name) {
             }
                         
             // Write the new inode
-            imap[inode_num] = new_node;
             int new_node_ptr = lseek(fd, 0, SEEK_CUR);
             write(fd, (char *)&new_node, sizeof(new_node));
 
@@ -448,10 +450,12 @@ int fs_create(int pinum, int type, char* name) {
             
 
             // Write new imap piece
+            lseek(fd, new_piece_ptr, SEEK_SET);
             write(fd, (char *)&new_piece, sizeof(new_piece));
 
-            // Save to CR
+            // Save to CR and in memory imap TODO AFTER EVERYTHING
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
+            imap[inode_num] = new_node;
             cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
 
             // Update p data block, p inode and p imap piece (if necessary) 
@@ -531,14 +535,17 @@ int fs_create(int pinum, int type, char* name) {
                     // Save to CR
                     cr.imap_piece_ptrs[piece_num] = new_ppiece_ptr;
                     cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
-
-                    rc = 0;
                 }
             }
-        }
-        if (dir_entry_written == 0) { // TODO ?
-            sendFailedResponse();
-            return -1;
+
+            // If never wrote a new entry, failue and don't save anything to CR
+            if (dir_entry_written == 0) {
+                sendFailedResponse();
+                return -1;
+            }
+            // Save to CR and in memory imap TODO
+            cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
+            imap[inode_num] = new_node;
         }
 
         // Write CR
@@ -788,23 +795,49 @@ void loadFS() {
     // Read in checkpoint region
     lseek(fd, 0, SEEK_SET);
     read(fd, (char *)&cr, sizeof(struct checkpoint_region));
+
+    // Set in memory imap to all invalid inodes
+    for (int i = 0; i < NUM_INODES; i++) {
+        struct inode inval;
+        inval.size = -1;
+        imap[i] = inval;
+    }
     
     // Loop through imap pieces and set up in memory imap
     for (int i = 0; i < NUM_IMAP_PIECES; i++) {
+        if (cr.imap_piece_ptrs[i] == -1) {
+            // Create neww empty piece
+            struct imap_piece piece;
+            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+                piece.inode_ptrs[j] = -1;
+            }
+
+            // Seek to end of log and write new piece
+            int new_piece_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
+            write(fd, (char *)&piece, sizeof(piece));
+
+            // Set CR
+            cr.imap_piece_ptrs[i] = new_piece_ptr;
+            cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+
+            // Continue
+            continue;
+        }
+
         // Read the piece
         struct imap_piece piece;
         lseek(fd, cr.imap_piece_ptrs[i], SEEK_SET);
         read(fd, (char *)&piece, sizeof(struct imap_piece));
         for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-            struct inode node;
-            lseek(fd, piece.inode_ptrs[j], SEEK_SET);
-            read(fd, (char *)&node, sizeof(struct inode));
+            if (piece.inode_ptrs[j] != -1) {
+                struct inode node;
+                lseek(fd, piece.inode_ptrs[j], SEEK_SET);
+                read(fd, (char *)&node, sizeof(struct inode));
 
-            int inode_num = i * NUM_INODES_PER_PIECE + j;
-            imap[inode_num] = node;
-            memset(&node, 0, sizeof(struct inode));
+                int inode_num = i * NUM_INODES_PER_PIECE + j;
+                imap[inode_num] = node;
+            }
         }
-        memset(&piece, 0, sizeof(struct imap_piece));
     }
 }
 
