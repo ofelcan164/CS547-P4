@@ -688,6 +688,104 @@ int fs_shutdown() {
     exit(0);
 }
 
+void initNewFS() {
+    // Create checkpoint region
+    write(fd, (char *)&cr, sizeof(cr)); // Write empty CR
+
+    // Create and write initial imap pieces
+    for (int i = 0; i < NUM_IMAP_PIECES; i++) {
+        // Create empty pieces and fill in memory imap
+        struct imap_piece piece;
+        for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+            piece.inode_ptrs[j] = -1;
+        }
+        int piece_ptr = lseek(fd, 0, SEEK_CUR);
+        write(fd, (char *)&piece, sizeof(piece));
+        cr.imap_piece_ptrs[i] = piece_ptr;
+    }
+
+    // Write out initial, empty CR with valid imap pointers (and pieces) and save log end pointer
+    cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+    lseek(fd, 0, SEEK_SET);
+    write(fd, (char *)&cr, sizeof(cr));
+
+    // Add root directory
+    MFS_DirEnt_t root_block[NUM_DIR_ENTRIES_PER_BLOCK];
+    // Write . and .. entries to the data block and then the remaining empty entries
+    strcpy(root_block[0].name, ".");
+    root_block[0].inum = 0;
+    strcpy(root_block[1].name, "..");
+    root_block[1].inum = 0;
+    int root_data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to end of imap pieces via log end pointer
+    for (int j = 2; j < NUM_DIR_ENTRIES_PER_BLOCK; j++) {
+        root_block[j].inum = -1;
+    }
+    write(fd, (char *)&root_block, sizeof(root_block));        
+
+    // Create root directory inode
+    struct inode root_dir;
+    root_dir.type = MFS_DIRECTORY;
+    root_dir.pointers[0] = root_data_ptr;
+    for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
+        root_dir.pointers[j] = -1;
+    }
+    int root_dir_inode_ptr = lseek(fd, 0, SEEK_CUR);
+    root_dir.size = 2*sizeof(MFS_DirEnt_t); // TODO
+    for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
+        root_dir.pointers[j] = -1;
+    }
+    write(fd, (char *)&root_dir, sizeof(root_dir)); // Write inode
+    
+    // Update the imap piece
+    struct imap_piece root_piece;
+    root_piece.inode_ptrs[0] = root_dir_inode_ptr;
+    for (int j = 1; j < NUM_INODES_PER_PIECE; j++) {
+        root_piece.inode_ptrs[j] = -1;
+    }
+    int root_imap_piece_ptr = lseek(fd, 0, SEEK_CUR);
+    write(fd, (char *)&root_piece, sizeof(root_piece)); // Write the imap piece
+
+    // Update cr
+    cr.imap_piece_ptrs[0] = root_imap_piece_ptr;
+    cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
+
+    // Initialize in memory imap
+    imap[0] = root_dir;
+    for (int j = 1; j < NUM_INODES; j++) {
+        imap[j].size = -1;
+    }
+
+    // Write CR
+    lseek(fd, 0, SEEK_SET);
+    write(fd, (char *)&cr, sizeof(cr));
+    
+    fsync(fd); // Force to disk
+}
+
+void loadFS() {
+    // Read in checkpoint region
+    lseek(fd, 0, SEEK_SET);
+    read(fd, (char *)&cr, sizeof(struct checkpoint_region));
+    
+    // Loop through imap pieces and set up in memory imap
+    for (int i = 0; i < NUM_IMAP_PIECES; i++) {
+        // Read the piece
+        struct imap_piece piece;
+        lseek(fd, cr.imap_piece_ptrs[i], SEEK_SET);
+        read(fd, (char *)&piece, sizeof(struct imap_piece));
+        for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
+            struct inode node;
+            lseek(fd, piece.inode_ptrs[j], SEEK_SET);
+            read(fd, (char *)&node, sizeof(struct inode));
+
+            int inode_num = i * NUM_INODES_PER_PIECE + j;
+            imap[inode_num] = node;
+            memset(&node, 0, sizeof(struct inode));
+        }
+        memset(&piece, 0, sizeof(struct imap_piece));
+    }
+}
+
 // Run the server
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -695,109 +793,13 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    // Initialize / Setup FS
-
     // File system image file does not exist
     if (access(argv[2], F_OK) == 0) {
         fd = open(argv[2], O_RDWR); // Open image file
-
-        // Read in checkpoint region
-        lseek(fd, 0, SEEK_SET);
-        read(fd, (char *)&cr, sizeof(struct checkpoint_region));
-        
-        // Loop through imap pieces and set up in memory imap
-        for (int i = 0; i < NUM_IMAP_PIECES; i++) {
-            // Read the piece
-            struct imap_piece piece;
-            lseek(fd, cr.imap_piece_ptrs[i], SEEK_SET);
-            read(fd, (char *)&piece, sizeof(piece));
-            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-                struct inode node;
-                lseek(fd, piece.inode_ptrs[j], SEEK_SET);
-                read(fd, (char *)&node, sizeof(node));
-
-                int inode_num = i * NUM_INODES_PER_PIECE + j;
-                imap[inode_num] = node;
-            }
-        }
-
-        // Force to disk
-        fsync(fd);
+        loadFS();
     } else {
         fd = open(argv[2], O_RDWR | O_CREAT); // Open and create image file
-
-        // Create checkpoint region
-
-        write(fd, (char *)&cr, sizeof(cr)); // Write empty CR
-
-        // Create and write initial imap pieces
-        for (int i = 0; i < NUM_IMAP_PIECES; i++) {
-            // Create empty pieces and fill in memory imap
-            struct imap_piece piece;
-            for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-                piece.inode_ptrs[j] = -1;
-            }
-            int piece_ptr = lseek(fd, 0, SEEK_CUR);
-            write(fd, (char *)&piece, sizeof(piece));
-            cr.imap_piece_ptrs[i] = piece_ptr;
-        }
-
-        // Write out initial, empty CR with valid imap pointers (and pieces) and save log end pointer
-        cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
-        lseek(fd, 0, SEEK_SET);
-        write(fd, (char *)&cr, sizeof(cr));
-
-        // Add root directory
-        MFS_DirEnt_t root_block[NUM_DIR_ENTRIES_PER_BLOCK];
-        // Write . and .. entries to the data block and then the remaining empty entries
-        strcpy(root_block[0].name, ".");
-        root_block[0].inum = 0;
-        strcpy(root_block[1].name, "..");
-        root_block[1].inum = 0;
-        int root_data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET); // Seek to end of imap pieces via log end pointer
-        for (int j = 2; j < NUM_DIR_ENTRIES_PER_BLOCK; j++) {
-            root_block[j].inum = -1;
-        }
-        write(fd, (char *)&root_block, sizeof(root_block));        
-
-        // Create root directory inode
-        struct inode root_dir;
-        root_dir.type = MFS_DIRECTORY;
-        root_dir.pointers[0] = root_data_ptr;
-        for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
-            root_dir.pointers[j] = -1;
-        }
-        int root_dir_inode_ptr = lseek(fd, 0, SEEK_CUR);
-        root_dir.size = 2*sizeof(MFS_DirEnt_t); // TODO
-        for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
-            root_dir.pointers[j] = -1;
-        }
-        write(fd, (char *)&root_dir, sizeof(root_dir)); // Write inode
-        
-        // Update the imap piece
-        struct imap_piece root_piece;
-        root_piece.inode_ptrs[0] = root_dir_inode_ptr;
-        for (int j = 1; j < NUM_INODES_PER_PIECE; j++) {
-            root_piece.inode_ptrs[j] = -1;
-        }
-        int root_imap_piece_ptr = lseek(fd, 0, SEEK_CUR);
-        write(fd, (char *)&root_piece, sizeof(root_piece)); // Write the imap piece
-
-        // Update cr
-        cr.imap_piece_ptrs[0] = root_imap_piece_ptr;
-        cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
-
-        // Initialize in memory imap
-        imap[0] = root_dir;
-        for (int j = 1; j < NUM_INODES; j++) {
-            imap[j].size = -1;
-        }
-
-        // Write CR
-        lseek(fd, 0, SEEK_SET);
-        write(fd, (char *)&cr, sizeof(cr));
-        
-        fsync(fd); // Force to disk
+        initNewFS();
     }
 
     sd = UDP_Open(atoi(argv[1]));
@@ -805,38 +807,35 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         struct request req;
-        int rc = UDP_Read(sd, &addr, (char *) &req, REQ_SIZE);
+        int bytesRead = UDP_Read(sd, &addr, (char *) &req, REQ_SIZE);
 
-        if (rc > 0) {
-            switch (req.type) {
-                case LOOKUP:
-                    fs_lookup(req.pinum, req.name);
-                    break;
-                case STAT:
-                    fs_stat(req.inum);
-                    break;
-                case WRITE:
-                    fs_write(req.inum, req.buffer, req.block);
-                    break;
-                case READ:
-                    fs_read(req.inum, req.block);
-                    break;
-                case CREAT:
-                    fs_create(req.pinum, req.file_type, req.name);
-                    break;
-                case UNLINK:
-                    fs_unlink(req.pinum, req.name);
-                    break;
-                case SHUTDOWN:
-                    rc = fs_shutdown();
-                    break;
-                default:
-                    break;
-            }
+        assert (bytesRead > -1);
+
+        switch (req.type) {
+            case LOOKUP:
+                fs_lookup(req.pinum, req.name);
+                break;
+            case STAT:
+                fs_stat(req.inum);
+                break;
+            case WRITE:
+                fs_write(req.inum, req.buffer, req.block);
+                break;
+            case READ:
+                fs_read(req.inum, req.block);
+                break;
+            case CREAT:
+                fs_create(req.pinum, req.file_type, req.name);
+                break;
+            case UNLINK:
+                fs_unlink(req.pinum, req.name);
+                break;
+            case SHUTDOWN:
+                fs_shutdown();
+                break;
+            default:
+                break;
         }
-
-        if (rc == -1)
-            return rc;
     }
 
     return 0;
