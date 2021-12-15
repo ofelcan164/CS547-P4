@@ -121,7 +121,7 @@ void fs_write(int inum, char* buffer, int block) {
     lseek(fd, imapPieceLocation, SEEK_SET);
     struct imap_piece imapPiece;
     int bytesRead = read(fd, &imapPiece, sizeof(struct imap_piece));
-    if (bytesRead > -1) sendFailedResponse();
+    if (bytesRead == -1) sendFailedResponse();
 
     // write block to end of FS
     int newBlockLocation = lseek(fd, cr.log_end_ptr, SEEK_SET);
@@ -189,7 +189,7 @@ void fs_read(int inum, int block) {
     // read data block into res buffer
     int bytesRead = read(fd, (char *)&(res.buffer), BUFFER_SIZE);
 
-    if (bytesRead < -1) sendFailedResponse;
+    if (bytesRead == -1) sendFailedResponse;
 
     // set response code
     res.rc = 0;
