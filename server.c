@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include "udp.h"
 #include "types.h"
 #include "mfs.h"
@@ -17,14 +18,12 @@ struct inode imap[NUM_INODES]; // Full imap - array of imap pieces
 
 int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
     lseek(fd, blockLocation, SEEK_SET);
+    MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
+    read(fd, (char *)&block, sizeof(block));
 
-    for (int i = 0; i < (MFS_BLOCK_SIZE); i+= sizeof(MFS_DirEnt_t)) {
-        MFS_DirEnt_t entry;
-        
-        read(fd, &entry, sizeof(MFS_DirEnt_t));
-
-        if (strcmp(entry.name, name) == 0) {
-            return entry.inum;
+    for (int i = 0; i < (NUM_DIR_ENTRIES_PER_BLOCK); i++) {
+        if (strcmp(block[i].name, name) == 0) {
+            return block[i].inum;
         }
     }
 
@@ -99,7 +98,7 @@ int fs_stat(int inum) {
 void sendFailedResponse() {
     struct response res;
     res.rc = -1;
-    UDP_Write(fd, &addr, (char *) &res, sizeof(RESP_SIZE));
+    UDP_Write(sd, &addr, (char *) &res, sizeof(RESP_SIZE));
     return;
 }
 
