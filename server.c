@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include "udp.h"
 #include "types.h"
 #include "mfs.h"
@@ -17,14 +18,12 @@ struct inode imap[NUM_INODES]; // Full imap - array of imap pieces
 
 int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
     lseek(fd, blockLocation, SEEK_SET);
+    MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
+    read(fd, (char *)&block, sizeof(block));
 
-    for (int i = 0; i < (MFS_BLOCK_SIZE); i+= sizeof(MFS_DirEnt_t)) {
-        MFS_DirEnt_t entry;
-        
-        read(fd, &entry, sizeof(MFS_DirEnt_t));
-
-        if (strcmp(entry.name, name) == 0) {
-            return entry.inum;
+    for (int i = 0; i < (NUM_DIR_ENTRIES_PER_BLOCK); i++) {
+        if (strcmp(block[i].name, name) == 0) {
+            return block[i].inum;
         }
     }
 
@@ -99,7 +98,7 @@ int fs_stat(int inum) {
 void sendFailedResponse() {
     struct response res;
     res.rc = -1;
-    UDP_Write(fd, &addr, (char *) &res, sizeof(RESP_SIZE));
+    UDP_Write(sd, &addr, (char *) &res, sizeof(RESP_SIZE));
     return;
 }
 
@@ -401,7 +400,7 @@ int fs_create(int pinum, int type, char* name) {
             // If never wrote a new entry, failue and don't save anything to CR
             if (dir_entry_written == 0) {
                 sendFailedResponse();
-                return;
+                return -1;
             }
             // Save to CR and in memory imap TODO 
             cr.imap_piece_ptrs[new_piece_num] = new_piece_ptr;
@@ -794,7 +793,7 @@ void initNewFS() {
 void loadFS() {
     // Read in checkpoint region
     lseek(fd, 0, SEEK_SET);
-    read(fd, (char *)&cr, sizeof(struct checkpoint_region));
+    read(fd, (char *)&cr, sizeof(cr));
 
     // Set in memory imap to all invalid inodes
     for (int i = 0; i < NUM_INODES; i++) {

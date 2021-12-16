@@ -2,7 +2,7 @@
 #include "udp.h"
 #include "types.h"
 
-#define CLIENT_PORT (12984)
+#define CLIENT_PORT (5000)
 
 int sd = -2; // should not be set to this in UDP_Open().
 struct sockaddr_in addrSnd, addrRcv;
@@ -17,13 +17,11 @@ int MFS_Init(char *hostname, int port) {
         return -1;
     }
 
-    sd = UDP_Open(CLIENT_PORT);
-
-    if (sd == -1) {
-        sd = -2; // reset to unitialized status
-        printf("Could not open connection on port: %d\n", CLIENT_PORT);
-        return -1;
-    }
+    int client = CLIENT_PORT;
+    do {
+        sd = UDP_Open(client);
+        client++;
+    } while (sd < 0);
 
     int rc = UDP_FillSockAddr(&addrSnd, hostname, port);
 
@@ -47,32 +45,42 @@ int MFS_Lookup(int pinum, char *name) {
     if (strlen(name) > 28)
         return -1;
 
-    // Fill struct to send
-    struct request req;
-    req.type = LOOKUP;
-    req.pinum = pinum;
-    strcpy(req.name, name);
 
-    // Send request
-    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Lookup -> UDP_Write()\n");
-        return rc;
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    do {
+        // Fill struct to send
+        struct request req;
+        req.type = LOOKUP;
+        req.pinum = pinum;
+        strcpy(req.name, name);
+
+        // Send request
+        int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Lookup -> UDP_Write()\n");
+            return rc;
+        }
+
+        // Receive inode number (or -1 if failed)
+        char buffer[RESP_SIZE];
+        rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Lookup -> UDP_Read()\n");
+            return rc;
+        }
+
+        // Cast response
+        struct response resp;
+        resp = *((struct response *)buffer);
+
+        return resp.rc;
     }
-
-    // Receive inode number (or -1 if failed)
-    char buffer[RESP_SIZE];
-    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Lookup -> UDP_Read()\n");
-        return rc;
-    }
-
-    // Cast response
-    struct response resp;
-    resp = *((struct response *)buffer);
-
-    return resp.rc;
+    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
 }
 
 /**
@@ -82,34 +90,43 @@ int MFS_Lookup(int pinum, char *name) {
  * Failure modes: inum does not exist.
  */
 int MFS_Stat(int inum, MFS_Stat_t *m) {
-    // Fill struct to send
-    struct request req;
-    req.type = STAT;
-    req.inum = inum;
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    do {
+        // Fill struct to send
+        struct request req;
+        req.type = STAT;
+        req.inum = inum;
 
-    // Send request
-    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Stat -> UDP_Write()\n");
-        return rc;
+        // Send request
+        int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Stat -> UDP_Write()\n");
+            return rc;
+        }
+
+        // Receive the stats of the inode
+        char buffer[RESP_SIZE];
+        rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Stat -> UDP_Read()\n");
+            return rc;
+        }
+        
+        // Cast response
+        struct response resp;
+        resp = *((struct response *)buffer);
+
+        // Return success or failure based on returned stats
+        m->size = resp.m.size;
+        m->type = resp.m.type;
+        return resp.rc;
     }
-
-    // Receive the stats of the inode
-    char buffer[RESP_SIZE];
-    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Stat -> UDP_Read()\n");
-        return rc;
-    }
-    
-    // Cast response
-    struct response resp;
-    resp = *((struct response *)buffer);
-
-    // Return success or failure based on returned stats
-    m->size = resp.m.size;
-    m->type = resp.m.type;
-    return resp.rc;
+    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
 }
 
 /**
@@ -118,37 +135,46 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
  * Failure modes: invalid inum, invalid block, not a regular file (because you can't write to directories).
  */
 int MFS_Write(int inum, char *buffer, int block) {
-    struct request req;
-    req.type = WRITE;
-    req.inum = inum;
-    req.block = block;
-    memcpy(req.buffer, buffer, MFS_BLOCK_SIZE);
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    do {
+        struct request req;
+        req.type = WRITE;
+        req.inum = inum;
+        req.block = block;
+        memcpy(req.buffer, buffer, MFS_BLOCK_SIZE);
 
-    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
+        int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
 
-    if (writeResult == -1) {
-        printf("Error occured while writing. MFS_Write() -> UDP_Write()\n");
-        return -1;
+        if (writeResult == -1) {
+            printf("Error occured while writing. MFS_Write() -> UDP_Write()\n");
+            return -1;
+        }
+
+        char response_message[RESP_SIZE];
+
+        int readResult = UDP_Read(sd, &addrRcv, response_message, RESP_SIZE);
+
+        if (readResult == -1) {
+            printf("Error occured while reading. MFS_Write() -> UDP_Read()\n");
+            return -1;
+        }
+
+        struct response res;
+        res = *((struct response *) response_message);
+
+        if (res.rc != 0) {
+            printf("Server error occured while writing. Reponse code: %d\n", res.rc);
+            return -1;
+        }
+
+        return res.rc;
     }
-
-    char response_message[RESP_SIZE];
-
-    int readResult = UDP_Read(sd, &addrRcv, response_message, RESP_SIZE);
-
-    if (readResult == -1) {
-        printf("Error occured while reading. MFS_Write() -> UDP_Read()\n");
-        return -1;
-    }
-
-    struct response res;
-    res = *((struct response *) response_message);
-
-    if (res.rc != 0) {
-        printf("Server error occured while writing. Reponse code: %d\n", res.rc);
-        return -1;
-    }
-
-    return res.rc;
+    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
 }
 
 /**
@@ -158,38 +184,47 @@ int MFS_Write(int inum, char *buffer, int block) {
  * Failure modes: invalid inum, invalid block.
  */
 int MFS_Read(int inum, char *buffer, int block) {
-    struct request req;
-    req.type = READ;
-    req.inum = inum;
-    req.block = block;
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    do {
+        struct request req;
+        req.type = READ;
+        req.inum = inum;
+        req.block = block;
 
-    int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
-    
-    if (writeResult == -1) {
-        printf("Error occured while writing. MFS_Read() -> UDP_Write()\n");
-        return -1;
+        int writeResult = UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
+        
+        if (writeResult == -1) {
+            printf("Error occured while writing. MFS_Read() -> UDP_Write()\n");
+            return -1;
+        }
+
+        char res_message[RESP_SIZE];
+
+        int readResult = UDP_Read(sd, &addrRcv, res_message, RESP_SIZE);
+
+        if (readResult == -1) {
+            printf("Error occured while reading. MFS_Read() -> UDP_Read()\n");
+            return -1;
+        }
+
+        struct response res;
+        res = *((struct response *) res_message);
+
+        if (res.rc != 0) {
+            printf("Server error occured while reading. Reponse code: %d\n", res.rc);
+            return -1;
+        }
+
+        memcpy(buffer, res.buffer, MFS_BLOCK_SIZE); //TODO: want to make sure room to copy and no overflow happening here.
+
+        return res.rc;
     }
-
-    char res_message[RESP_SIZE];
-
-    int readResult = UDP_Read(sd, &addrRcv, res_message, RESP_SIZE);
-
-    if (readResult == -1) {
-        printf("Error occured while reading. MFS_Read() -> UDP_Read()\n");
-        return -1;
-    }
-
-    struct response res;
-    res = *((struct response *) res_message);
-
-    if (res.rc != 0) {
-        printf("Server error occured while reading. Reponse code: %d\n", res.rc);
-        return -1;
-    }
-
-    memcpy(buffer, res.buffer, MFS_BLOCK_SIZE); //TODO: want to make sure room to copy and no overflow happening here.
-
-    return res.rc;
+    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
 }
 
 /**
@@ -203,34 +238,43 @@ int MFS_Creat(int pinum, int type, char *name) {
     if (strlen(name) > 28)
         return -1;
 
-    // Fill struct to send
-    struct request req;
-    req.type = CREAT;
-    req.pinum = pinum;
-    req.file_type = type;
-    strcpy(req.name, name);
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    do {
+        // Fill struct to send
+        struct request req;
+        req.type = CREAT;
+        req.pinum = pinum;
+        req.file_type = type;
+        strcpy(req.name, name);
 
-    // Send request
-    int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Creat -> UDP_Write()\n");
-        return rc;
+        // Send request
+        int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Creat -> UDP_Write()\n");
+            return rc;
+        }
+
+        // Receive success or failure
+        char buffer[RESP_SIZE];
+        rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Creat -> UDP_Read()\n");
+            return rc;
+        }
+        
+        // Cast response
+        struct response resp;
+        resp = *((struct response *)buffer);
+
+        // Return based on what server returned   
+        return resp.rc;
     }
-
-    // Receive success or failure
-    char buffer[RESP_SIZE];
-    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Creat -> UDP_Read()\n");
-        return rc;
-    }
-    
-    // Cast response
-    struct response resp;
-    resp = *((struct response *)buffer);
-
-    // Return based on what server returned   
-    return resp.rc;
+    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
 }
 
 /**
@@ -242,7 +286,7 @@ int MFS_Unlink(int pinum, char *name) {
     // Check name
     if (strlen(name) > 28)
         return -1;
-        
+
     // Fill struct to send
     struct request req;
     req.type = UNLINK;
@@ -254,6 +298,17 @@ int MFS_Unlink(int pinum, char *name) {
     if (rc < 0) {
         printf("Error occured in MFS_Unlink -> UDP_Write()\n");
         return rc;
+    }
+
+    // Wait for reads
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    while (select(8, &readfds, NULL, NULL, &timeout) == 0) {
+        UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
     }
 
     // Receive success or failure
