@@ -47,7 +47,7 @@ int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
  * Success: return inode number of name; failure: return -1. 
  * Failure modes: invalid pinum, name does not exist in pinum.
  */
-void fs_lookup(int pinum, char* name) { // Nate
+int fs_lookup(int pinum, char* name, int help) { // Nate
     struct inode node = imap[pinum];
 
     if (node.size == -1) {
@@ -71,10 +71,12 @@ void fs_lookup(int pinum, char* name) { // Nate
     struct response res;
     res.rc = inodeNumber;
 
-    // write response
-    UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+    if (help == 0) {
+        // write response
+        UDP_Write(sd, &addr, (char *) &res, RESP_SIZE);
+    }
 
-    return;
+    return inodeNumber;
 }
 
 /**
@@ -870,7 +872,7 @@ int main(int argc, char *argv[]) {
         
         switch (req.type) {
             case LOOKUP:
-                fs_lookup(req.pinum, req.name);
+                fs_lookup(req.pinum, req.name, 0);
                 break;
             case STAT:
                 fs_stat(req.inum);
