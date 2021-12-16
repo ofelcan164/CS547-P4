@@ -306,7 +306,7 @@ void fs_create(int pinum, int type, char* name) {
         new_block[0].inum = inode_num;
         strcpy(new_block[1].name, "..");
         new_block[1].inum = pinum;
-        write(fd, &new_block, sizeof(new_block));
+        write(fd, &new_block, sizeof(MFS_BLOCK_SIZE));
         node.size = MFS_BLOCK_SIZE;
     }
 
@@ -575,7 +575,7 @@ void initNewFS() {
         root_dir.pointers[j] = -1;
     }
     int root_dir_inode_ptr = lseek(fd, 0, SEEK_CUR);
-    root_dir.size = 2*sizeof(MFS_DirEnt_t); // TODO
+    root_dir.size = MFS_BLOCK_SIZE; // TODO
     for (int j = 1; j < NUM_POINTERS_PER_INODE; j++) {
         root_dir.pointers[j] = -1;
     }
