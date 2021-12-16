@@ -63,7 +63,7 @@ int MFS_Lookup(int pinum, char *name) {
         int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
         if (rc < 0) {
             printf("Error occured in MFS_Lookup -> UDP_Write()\n");
-            return rc;
+            // return rc;
         }
 
         // Receive inode number (or -1 if failed)
@@ -71,7 +71,7 @@ int MFS_Lookup(int pinum, char *name) {
         rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
         if (rc < 0) {
             printf("Error occured in MFS_Lookup -> UDP_Read()\n");
-            return rc;
+            // return rc;
         }
 
         // Cast response
@@ -106,7 +106,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
         int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
         if (rc < 0) {
             printf("Error occured in MFS_Stat -> UDP_Write()\n");
-            return rc;
+            // return rc;
         }
 
         // Receive the stats of the inode
@@ -114,7 +114,7 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
         rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
         if (rc < 0) {
             printf("Error occured in MFS_Stat -> UDP_Read()\n");
-            return rc;
+            // return rc;
         }
         
         // Cast response
@@ -152,7 +152,7 @@ int MFS_Write(int inum, char *buffer, int block) {
 
         if (writeResult == -1) {
             printf("Error occured while writing. MFS_Write() -> UDP_Write()\n");
-            return -1;
+            // return -1;
         }
 
         char response_message[RESP_SIZE];
@@ -161,16 +161,11 @@ int MFS_Write(int inum, char *buffer, int block) {
 
         if (readResult == -1) {
             printf("Error occured while reading. MFS_Write() -> UDP_Read()\n");
-            return -1;
+            // return -1;
         }
 
         struct response res;
         res = *((struct response *) response_message);
-
-        if (res.rc != 0) {
-            printf("Server error occured while writing. Reponse code: %d\n", res.rc);
-            return -1;
-        }
 
         return res.rc;
     }
@@ -200,7 +195,7 @@ int MFS_Read(int inum, char *buffer, int block) {
         
         if (writeResult == -1) {
             printf("Error occured while writing. MFS_Read() -> UDP_Write()\n");
-            return -1;
+            // return -1;
         }
 
         char res_message[RESP_SIZE];
@@ -209,16 +204,11 @@ int MFS_Read(int inum, char *buffer, int block) {
 
         if (readResult == -1) {
             printf("Error occured while reading. MFS_Read() -> UDP_Read()\n");
-            return -1;
+            // return -1;
         }
 
         struct response res;
         res = *((struct response *) res_message);
-
-        if (res.rc != 0) {
-            printf("Server error occured while reading. Reponse code: %d\n", res.rc);
-            return -1;
-        }
 
         memcpy(buffer, res.buffer, MFS_BLOCK_SIZE); //TODO: want to make sure room to copy and no overflow happening here.
 
@@ -256,7 +246,7 @@ int MFS_Creat(int pinum, int type, char *name) {
         int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
         if (rc < 0) {
             printf("Error occured in MFS_Creat -> UDP_Write()\n");
-            return rc;
+            // return rc;
         }
 
         // Receive success or failure
@@ -264,7 +254,7 @@ int MFS_Creat(int pinum, int type, char *name) {
         rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
         if (rc < 0) {
             printf("Error occured in MFS_Creat -> UDP_Read()\n");
-            return rc;
+            // return rc;
         }
         
         // Cast response
@@ -297,7 +287,7 @@ int MFS_Unlink(int pinum, char *name) {
     int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
     if (rc < 0) {
         printf("Error occured in MFS_Unlink -> UDP_Write()\n");
-        return rc;
+        // return rc;
     }
 
     // Wait for reads
@@ -316,7 +306,7 @@ int MFS_Unlink(int pinum, char *name) {
     rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
     if (rc < 0) {
         printf("Error occured in MFS_Unlink -> UDP_Read()\n");
-        return rc;
+        // return rc;
     }
     
     // Cast response
