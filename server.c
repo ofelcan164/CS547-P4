@@ -16,6 +16,16 @@ int fd; // File descriptor of open FS image file
 struct checkpoint_region cr; // Checkpoint region - in memory
 struct inode imap[NUM_INODES]; // Full imap - array of imap pieces
 
+/**
+* Sends failure response to client TODO
+*/
+void sendFailedResponse() {
+    struct response res;
+    res.rc = -1;
+    UDP_Write(sd, &addr, (char *) &res, sizeof(RESP_SIZE));
+    return;
+}
+
 int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
     lseek(fd, blockLocation, SEEK_SET);
     MFS_DirEnt_t block[NUM_DIR_ENTRIES_PER_BLOCK];
@@ -39,6 +49,11 @@ int checkDataBlockForMatchingEntry(int blockLocation, char* name) {
  */
 void fs_lookup(int pinum, char* name) { // Nate
     struct inode node = imap[pinum];
+
+    if (node.size == -1) {
+        sendFailedResponse();
+        return;
+    }
 
     int inodeNumber = -1;
 
@@ -90,16 +105,6 @@ int fs_stat(int inum) {
     UDP_Write(sd, &addr, (char *)&resp, RESP_SIZE);
 
     return rc;
-}
-
-/**
-* Sends failure response to client TODO
-*/
-void sendFailedResponse() {
-    struct response res;
-    res.rc = -1;
-    UDP_Write(sd, &addr, (char *) &res, sizeof(RESP_SIZE));
-    return;
 }
 
 /**
