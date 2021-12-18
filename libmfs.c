@@ -298,24 +298,24 @@ int MFS_Unlink(int pinum, char *name) {
     struct timeval timeout;
     timeout.tv_sec = 5;
     timeout.tv_usec = 0;
-    while (select(8, &readfds, NULL, NULL, &timeout) == 0) {
+    do {
         UDP_Write(sd, &addrSnd, (char *) &req, REQ_SIZE);
-    }
 
-    // Receive success or failure
-    char buffer[RESP_SIZE];
-    rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
-    if (rc < 0) {
-        printf("Error occured in MFS_Unlink -> UDP_Read()\n");
-        // return rc;
-    }
-    
-    // Cast response
-    struct response resp;
-    resp = *((struct response *)buffer);
+        // Receive success or failure
+        char buffer[RESP_SIZE];
+        rc = UDP_Read(sd, &addrRcv, buffer, RESP_SIZE);
+        if (rc < 0) {
+            printf("Error occured in MFS_Unlink -> UDP_Read()\n");
+            // return rc;
+        }
+        
+        // Cast response
+        struct response resp;
+        resp = *((struct response *)buffer);
 
-    // Return based on what server returned
-    return resp.rc;
+        // Return based on what server returned
+        return resp.rc;
+    } while (select(8, &readfds, NULL, NULL, &timeout) == 0);
 }
 
 /**
