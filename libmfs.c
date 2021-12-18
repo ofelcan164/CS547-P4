@@ -214,8 +214,7 @@ int MFS_Read(int inum, char *buffer, int block) {
         memcpy(buffer, res.buffer, MFS_BLOCK_SIZE); //TODO: want to make sure room to copy and no overflow happening here.
 
         return res.rc;
-    }
-    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
+    } while((select(8, &readfds, NULL, NULL, &timeout) == 0));
 }
 
 /**
