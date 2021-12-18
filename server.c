@@ -257,11 +257,14 @@ void fs_create(int pinum, int type, char* name) {
                 if (block[j].inum == -1) {
                     block_num = i;
                     entry_off = j;
-                    //exit both for loops
-                    j = NUM_DIR_ENTRIES_PER_BLOCK;
-                    i = NUM_POINTERS_PER_INODE;
+                    
+                    break;
                 }
             }
+        }
+
+        if (block_num != -1) {
+            break;
         }
     }
 
@@ -270,6 +273,7 @@ void fs_create(int pinum, int type, char* name) {
             if (pnode.pointers[i] == -1) {
                 block_num = i;
                 entry_off = 0;
+                break;
             }
         }
     }
@@ -299,7 +303,7 @@ void fs_create(int pinum, int type, char* name) {
     int data_ptr = -1;
     if (type == MFS_DIRECTORY) {
         // Write data block
-        data_ptr = lseek(fd, 0, SEEK_END);
+        data_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
         MFS_DirEnt_t new_block[NUM_DIR_ENTRIES_PER_BLOCK];
         // Write . and .. entries to the data block and then the remaining empty entries
         strcpy(new_block[0].name, ".");
@@ -308,6 +312,7 @@ void fs_create(int pinum, int type, char* name) {
         new_block[1].inum = pinum;
         write(fd, &new_block, MFS_BLOCK_SIZE);
         node.size = MFS_BLOCK_SIZE;
+        cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
     }
 
     // Update and write inode
@@ -316,18 +321,21 @@ void fs_create(int pinum, int type, char* name) {
         node.pointers[i] = -1;
     }
     node.type = type;
-    int node_ptr = lseek(fd, 0, SEEK_CUR);
-    write(fd, &node, sizeof(node));
+    int node_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
+    write(fd, &node, sizeof(struct inode));
     
     // Update the imap piece
     struct imap_piece piece;
     int piece_num = inode_num / NUM_INODES_PER_PIECE;
     int piece_idx = inode_num % NUM_INODES_PER_PIECE;
-    lseek(fd, cr.imap_piece_ptrs[piece_num], SEEK_SET);
-    read(fd, &piece, sizeof(piece));
-    piece.inode_ptrs[piece_idx] = node_ptr;
     int piece_ptr = lseek(fd, 0, SEEK_CUR);
-    write(fd, (char *)&piece, sizeof(piece)); // Write the imap piece
+
+    lseek(fd, cr.imap_piece_ptrs[piece_num], SEEK_SET);
+    read(fd, &piece, sizeof(struct imap_piece));
+    piece.inode_ptrs[piece_idx] = node_ptr;
+
+    lseek(fd, piece_ptr, SEEK_SET); 
+    write(fd, (char *)&piece, sizeof(struct imap_piece)); // Write the imap piece
 
     // Update cr and in memory imap
     cr.imap_piece_ptrs[piece_num] = piece_ptr;
@@ -338,14 +346,14 @@ void fs_create(int pinum, int type, char* name) {
     // Get ppiece
     struct imap_piece ppiece;
     lseek(fd, cr.imap_piece_ptrs[pinum / NUM_INODES_PER_PIECE], SEEK_SET);
-    read(fd, &ppiece, sizeof(ppiece));
+    read(fd, &ppiece, sizeof(struct imap_piece));
 
     // Get data block to insert entry
     MFS_DirEnt_t pblock[NUM_DIR_ENTRIES_PER_BLOCK];
-    if (pnode.pointers[block_num] != -1) {
-        lseek(fd, pnode.pointers[block_num], SEEK_SET);
-        read(fd, &pblock, MFS_BLOCK_SIZE);
-    }
+    // if (pnode.pointers[block_num] != -1) { TODO ?
+    lseek(fd, pnode.pointers[block_num], SEEK_SET);
+    read(fd, &pblock, MFS_BLOCK_SIZE);
+    // }
     
     // Add entry
     pblock[entry_off].inum = inode_num;
@@ -358,22 +366,22 @@ void fs_create(int pinum, int type, char* name) {
     // Update and write pnode
     pnode.pointers[block_num] = pblock_data_ptr;
     int pnode_ptr = lseek(fd, 0, SEEK_CUR);
-    write(fd, &pnode, sizeof(pnode));
+    write(fd, &pnode, sizeof(struct inode));
 
     // Update and write ppiece
     ppiece.inode_ptrs[pinum % NUM_INODES_PER_PIECE] = pnode_ptr;
     int ppiece_ptr = lseek(fd, 0, SEEK_CUR);
-    write(fd, &ppiece, sizeof(ppiece));
+    write(fd, &ppiece, sizeof(struct imap_piece));
 
     // Update CR and in mem imap
     cr.imap_piece_ptrs[pinum / NUM_INODES_PER_PIECE] = ppiece_ptr;
     cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
     imap[pinum] = pnode;
     lseek(fd, 0, SEEK_SET);
-    write(fd, &cr, sizeof(cr));
+    write(fd, &cr, sizeof(struct checkpoint_region));
 
     fsync(fd);
-    // SEND SUCCESS MESSAGE
+    // Send Success
     sendSuccessResponse();
 }
 
@@ -530,6 +538,9 @@ int fs_shutdown() {
     fsync(fd);
     close(fd);
     UDP_Close(sd);
+    struct response res;
+    res.rc = 0;
+    UDP_Write(sd, &addr, (char *)&res, sizeof(struct response));
     exit(0);
 }
 
@@ -613,7 +624,7 @@ void initNewFS() {
 void loadFS() {
     // Read in checkpoint region
     lseek(fd, 0, SEEK_SET);
-    read(fd, (char *)&cr, sizeof(cr));
+    read(fd, (char *)&cr, sizeof(struct checkpoint_region));
 
     // Set in memory imap to all invalid inodes
     for (int i = 0; i < NUM_INODES; i++) {
@@ -625,22 +636,19 @@ void loadFS() {
     // Loop through imap pieces and set up in memory imap
     for (int i = 0; i < NUM_IMAP_PIECES; i++) {
         if (cr.imap_piece_ptrs[i] == -1) {
-            // Create neww empty piece
-            struct imap_piece piece;
+            // Create new empty piece
+            struct imap_piece new_piece;
             for (int j = 0; j < NUM_INODES_PER_PIECE; j++) {
-                piece.inode_ptrs[j] = -1;
+                new_piece.inode_ptrs[j] = -1;
             }
 
             // Seek to end of log and write new piece
             int new_piece_ptr = lseek(fd, cr.log_end_ptr, SEEK_SET);
-            write(fd, (char *)&piece, sizeof(piece));
+            write(fd, (char *)&new_piece, sizeof(struct imap_piece));
 
             // Set CR
             cr.imap_piece_ptrs[i] = new_piece_ptr;
             cr.log_end_ptr = lseek(fd, 0, SEEK_CUR);
-
-            // Continue
-            continue;
         }
 
         // Read the piece
@@ -669,9 +677,11 @@ int main(int argc, char *argv[]) {
 
     // File system image file does not exist
     if (access(argv[2], F_OK) == 0) {
+        printf("!!!!!Loading FS.........\n");
         fd = open(argv[2], O_RDWR); // Open image file
         loadFS();
     } else {
+        printf("!!!!!!!Initializing FS......\n");
         fd = open(argv[2], O_RDWR | O_CREAT); // Open and create image file
         initNewFS();
     }

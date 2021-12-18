@@ -18,10 +18,10 @@ int MFS_Init(char *hostname, int port) {
     }
 
     int client = CLIENT_PORT;
-    do {
+    while (sd < 0) {
         sd = UDP_Open(client);
         client++;
-    } while (sd < 0);
+    }
 
     int rc = UDP_FillSockAddr(&addrSnd, hostname, port);
 
@@ -57,7 +57,7 @@ int MFS_Lookup(int pinum, char *name) {
         struct request req;
         req.type = LOOKUP;
         req.pinum = pinum;
-        strcpy(req.name, name);
+        memcpy(req.name, name, sizeof(req.name));
 
         // Send request
         int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
@@ -79,8 +79,9 @@ int MFS_Lookup(int pinum, char *name) {
         resp = *((struct response *)buffer);
 
         return resp.rc;
-    }
-    while((select(8, &readfds, NULL, NULL, &timeout) == 0));
+    } while((select(8, &readfds, NULL, NULL, &timeout) == 0));
+    
+    return -1;
 }
 
 /**
@@ -240,7 +241,7 @@ int MFS_Creat(int pinum, int type, char *name) {
         req.type = CREAT;
         req.pinum = pinum;
         req.file_type = type;
-        strcpy(req.name, name);
+        memcpy(req.name, name, sizeof(req.name));
 
         // Send request
         int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);
@@ -274,14 +275,15 @@ int MFS_Creat(int pinum, int type, char *name) {
  */
 int MFS_Unlink(int pinum, char *name) {
     // Check name
-    if (strlen(name) > 28)
+    if (strlen(name) > 28) {
         return -1;
+    }
 
     // Fill struct to send
     struct request req;
     req.type = UNLINK;
     req.pinum = pinum;
-    strcpy(req.name, name);
+    memcpy(req.name, name, sizeof(req.name));
 
     // Send request
     int rc = UDP_Write(sd, &addrSnd, (char *)&req, REQ_SIZE);

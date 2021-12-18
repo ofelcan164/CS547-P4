@@ -5,15 +5,15 @@
 
 // client code
 int main(int argc, char *argv[]) {
-    printf("ll;ajsdlfjl;kasdjf\n");
-    int rc = MFS_Init("localhost", 9000); // TODO
+    MFS_Init("localhost", 9000); // TODO
 
-    MFS_Creat(0, 1, "foo");
+    printf("%d\n", MFS_Creat(0, 1, "foo"));
 
-    MFS_Write(1, "test ", 14);
+    printf("%d\n", MFS_Write(1, "testasdasdadasdasdasdfweonw ffbibw wibwef wefej webfw efwebf ", 0));
+    printf("%d\n", MFS_Lookup(0, "foo"));
 
     MFS_Shutdown();
 
-    return rc;
+    return 0;
 }
 
